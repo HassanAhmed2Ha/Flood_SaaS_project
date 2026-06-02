@@ -60,7 +60,9 @@ A **Smart Cloud Fallback** safety net prevents model hallucination when dense cl
 
 ### Architecture Philosophy
 
-Wide-area disaster scanning (up to **400 km²** per request) is achieved through a **CPU-optimized Grid-Tiling Engine** that subdivides the area of interest into 5×5 km tiles, fetches satellite data concurrently via `ThreadPoolExecutor`, runs per-tile AI inference, and mosaics the results into a seamless output raster. This design eliminates Earth Engine timeout failures and operates without GPU dependencies — suitable for serverless or containerized## System Architecture
+Wide-area disaster scanning (up to **400 km²** per request) is achieved through a **CPU-optimized Grid-Tiling Engine** that subdivides the area of interest into 5×5 km tiles, fetches satellite data concurrently via `ThreadPoolExecutor`, runs per-tile AI inference, and mosaics the results into a seamless output raster. This design eliminates Earth Engine timeout failures and operates without GPU dependencies — suitable for serverless or containerized environments.
+
+## System Architecture
 
 ```
 ============================= TACTICAL DATA FLOW SYSTEM =============================
@@ -123,67 +125,6 @@ Wide-area disaster scanning (up to **400 km²** per request) is achieved through
 ║            🛰️  Sentinel-1 Radar (GRD)   |   🛰️  Sentinel-2 Optical (MSI)         ║
 ╚═══════════════════════════════════════════════════════════════════════════════════╝
 ```
-
-<details>
-<summary>🖥️ View Interactive Cyberpunk Flowchart (HTML/CSS)</summary>
-
-<div class="cyber-flowchart" style="background-color: #0a0f1e; color: #00e5ff; font-family: 'JetBrains Mono', 'Space Mono', monospace; padding: 30px; border: 1px solid #00aaff; box-shadow: 0 0 15px rgba(0, 170, 255, 0.2); position: relative; margin: 20px 0; border-radius: 4px;">
-  <!-- Corner Brackets -->
-  <div style="position: absolute; top: 5px; left: 5px; border-top: 2px solid #00aaff; border-left: 2px solid #00aaff; width: 12px; height: 12px;"></div>
-  <div style="position: absolute; top: 5px; right: 5px; border-top: 2px solid #00aaff; border-right: 2px solid #00aaff; width: 12px; height: 12px;"></div>
-  <div style="position: absolute; bottom: 5px; left: 5px; border-bottom: 2px solid #00aaff; border-left: 2px solid #00aaff; width: 12px; height: 12px;"></div>
-  <div style="position: absolute; bottom: 5px; right: 5px; border-bottom: 2px solid #00aaff; border-right: 2px solid #00aaff; width: 12px; height: 12px;"></div>
-
-  <div style="text-align: center; margin-bottom: 25px; border-bottom: 1px dashed rgba(0, 170, 255, 0.4); padding-bottom: 10px;">
-    <span style="font-weight: bold; letter-spacing: 2px; text-transform: uppercase;">Tactical System Architecture</span>
-  </div>
-
-  <div style="display: flex; flex-direction: column; align-items: center; gap: 20px;">
-    
-    <!-- User Input Node -->
-    <div style="background-color: rgba(0, 170, 255, 0.05); border: 1px dashed #00aaff; padding: 15px 25px; border-radius: 2px; text-align: center; width: 280px; box-sizing: border-box;">
-      <div style="font-size: 0.8em; color: #888;">[01] CLIENT TERMINAL</div>
-      <div style="font-weight: bold; margin-top: 5px;">User Input & Parameters</div>
-      <div style="font-size: 0.85em; color: rgba(0, 229, 255, 0.8); margin-top: 5px;">Coordinate, Date, Radius</div>
-    </div>
-
-    <!-- Arrow 1 -->
-    <div style="color: #00aaff; font-weight: bold;">▼ POST /api/scan</div>
-
-    <!-- API Gateway Node -->
-    <div style="background-color: rgba(0, 170, 255, 0.1); border: 1px solid #00aaff; box-shadow: 0 0 10px rgba(0, 170, 255, 0.1); padding: 18px 25px; border-radius: 2px; text-align: center; width: 320px; box-sizing: border-box; position: relative;">
-      <div style="position: absolute; top: -1px; left: 10px; background: #0a0f1e; padding: 0 5px; font-size: 0.7em; color: #00aaff;">EDGE GATEWAY</div>
-      <div style="font-weight: bold; color: #fff;">API Gateway (Cloudflare Worker)</div>
-      <div style="font-size: 0.8em; color: #88aaff; margin-top: 5px;">Auth Injection (HF_TOKEN) & CORS Handlers</div>
-    </div>
-
-    <!-- Double Arrow Flow & Polling Loop -->
-    <div style="display: flex; justify-content: space-between; width: 340px; font-size: 0.8em; padding: 0 10px;">
-      <div style="color: #00aaff;">▼ Proxy POST</div>
-      <div style="color: #ff0055; font-weight: bold;">▲ GET Task Polling (5s)</div>
-    </div>
-
-    <!-- AI Engine Node -->
-    <div style="background-color: rgba(0, 170, 255, 0.1); border: 1px solid #00aaff; box-shadow: 0 0 10px rgba(0, 170, 255, 0.1); padding: 18px 25px; border-radius: 2px; text-align: center; width: 320px; box-sizing: border-box; position: relative;">
-      <div style="position: absolute; top: -1px; left: 10px; background: #0a0f1e; padding: 0 5px; font-size: 0.7em; color: #00aaff;">AI ENGINE</div>
-      <div style="font-weight: bold; color: #fff;">AI Engine (FastAPI)</div>
-      <div style="font-size: 0.8em; color: #88aaff; margin-top: 5px;">BackgroundTasks Orchestration & Tasks State Store</div>
-    </div>
-
-    <!-- Arrow 3 -->
-    <div style="color: #00aaff; font-weight: bold;">▼ Parallel GIS & Satellite Fetch</div>
-
-    <!-- Google Earth Engine Node -->
-    <div style="background-color: rgba(0, 229, 255, 0.03); border: 1px dashed rgba(0, 170, 255, 0.5); padding: 15px 25px; border-radius: 2px; text-align: center; width: 280px; box-sizing: border-box;">
-      <div style="font-size: 0.8em; color: #888;">[04] TELESPECTRAL DATA</div>
-      <div style="font-weight: bold; color: #fff;">Google Earth Engine</div>
-      <div style="font-size: 0.8em; color: #88aaff; margin-top: 5px;">Sentinel-1 (SAR) & Sentinel-2 (MSI)</div>
-    </div>
-
-  </div>
-</div>
-
-</details>
 
 ### Request Lifecycle
 
