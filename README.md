@@ -55,7 +55,7 @@ Wide-area disaster scanning (up to **400 km²** per request) is achieved through
 
 ```
 ┌───────────────────────────────────────────────────────────────────┐
-│                     FRONTEND (Port 3000)                         │
+│              FRONTEND (Hosted on Cloudflare Pages)               │
 │  Vanilla JS · Three.js Globe · Leaflet Map · Tactical HUD       │
 │  ┌─────────────┐ ┌──────────────┐ ┌──────────────────────────┐   │
 │  │ Left Panel  │ │ 3D Globe /   │ │ Right Panel              │   │
@@ -63,20 +63,21 @@ Wide-area disaster scanning (up to **400 km²** per request) is achieved through
 │  │ Parameters  │ │ Map View     │ │ Damage Metrics           │   │
 │  └─────────────┘ └──────────────┘ └──────────────────────────┘   │
 │  ┌──────────────────────────────────────────────────────────────┐ │
-│  │ Bottom Panel — System Log (auto-scrolling telemetry stream) │ │
+│  │ Bottom Panel — System Log (dynamic asynchronous polling)    │ │
 │  └──────────────────────────────────────────────────────────────┘ │
-└──────────────────────┬────────────────────────────────────────────┘
-                       │  POST /api/scan
-                       ▼
-┌──────────────────────────────────────────────────────────────────┐
-│               NODE.JS API GATEWAY (Port 3000)                    │
-│  Express.js — CORS, JSON parsing, static file serving            │
-│  Forwards request body to Python AI Engine via axios             │
-└──────────────────────┬───────────────────────────────────────────┘
-                       │  POST /api/v1/analyze_flood
-                       ▼
-┌──────────────────────────────────────────────────────────────────┐
-│              PYTHON FASTAPI AI ENGINE (Port 8000)                │
+└──────────────┬────────────────────────▲───────────────────────────┘
+               │ 1. POST /api/scan      │ 3. GET /api/status/{task_id} (every 5s)
+               ▼                        │
+┌───────────────────────────────────────┴──────────────────────────┐
+│           API GATEWAY (Cloudflare Serverless Worker)              │
+│  Intercepts requests, handles CORS preflights, injects auth.    │
+└──────────────┬────────────────────────▲──────────────────────────┘
+               │ 2. Forward POST        │ 4. Forward GET status
+               ▼                        │
+┌───────────────────────────────────────┴──────────────────────────┐
+│      PYTHON FASTAPI AI ENGINE (Hugging Face Space / FastAPI)     │
+│  Uses BackgroundTasks to process grid analysis asynchronously.    │
+│  Tracks status in-memory via uuid task ID keys.                  │
 │                                                                  │
 │  ┌──────────┐   ┌──────────────┐   ┌──────────────────────────┐  │
 │  │ GEE      │──▶│ AI           │──▶│ GIS Post-Processing      │  │
@@ -88,26 +89,28 @@ Wide-area disaster scanning (up to **400 km²** per request) is achieved through
 │  │         Grid Orchestrator (Wide-Area Tiling Mode)            │ │
 │  │  generate_grid → ThreadPoolExecutor → rasterio.merge         │ │
 │  └──────────────────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────────────┘
-                       │
-                       ▼
-          ┌─────────────────────────┐
-          │  Google Earth Engine    │
-          │  Sentinel-1 SAR (GRD)  │
-          │  Sentinel-2 MSI        │
-          └─────────────────────────┘
+└───────────────────────────────────────┬──────────────────────────┘
+                                        │
+                                        ▼
+                           ┌─────────────────────────┐
+                           │  Google Earth Engine    │
+                           │  Sentinel-1 SAR (GRD)  │
+                           │  Sentinel-2 MSI        │
+                           └─────────────────────────┘
 ```
 
 ### Request Lifecycle
 
 1. **User Input** → The operator enters target coordinates, date range, and scan radius on the Left Panel.
-2. **Frontend** → `index.js` fires a `POST /api/scan` with the payload (`latitude`, `longitude`, `start_date`, `end_date`, `radius_km`, `tile_size_km`, `max_workers`). A simulated tactical progress stream animates the System Log during the wait.
-3. **Node.js Gateway** → `server.js` receives the JSON, logs it, and proxies it verbatim to the Python engine at `http://127.0.0.1:8000/api/v1/analyze_flood`.
-4. **Python Engine** → `main.py` branches:
-   - **Single-tile mode** (`radius_km = 0`): Calls `gee_fetcher` → `predict_flood` → `gis_metrics` sequentially.
-   - **Grid mode** (`radius_km > 0`): Delegates to `grid_orchestrator.run_grid_analysis()`, which tiles the AOI, processes concurrently, and mosaics.
-5. **Response** → The engine returns JSON with `confidence_score`, `metrics` (flood area, buildings damaged, roads affected), and `flood_geojson`.
-6. **Frontend Render** → On success, a cinematic 3D-to-2D transition zooms into the target, Leaflet renders the flood GeoJSON, and the Right Panel displays tactical intel gauges.
+2. **Task Creation (POST)** → The frontend fires a `POST /api/scan` to the Cloudflare Worker API Gateway.
+3. **Gateway Forwarding** → The Cloudflare Worker injects the `HF_TOKEN` authorization header and forwards the request to the Python engine's `/api/v1/analyze_flood` endpoint.
+4. **Immediate Scheduling** → The Python engine generates a unique `task_id` (UUID), stores a status of `"processing"` in-memory, schedules the execution to run on FastAPI's `BackgroundTasks`, and returns `{"task_id": "uuid"}` back through the Gateway to the client in under 500ms.
+5. **Asynchronous Polling Loop (GET)** → The frontend receives the `task_id`, clears the initial progress stream, and begins querying `GET /api/status/{task_id}` via the Cloudflare Worker Gateway every 5 seconds.
+6. **Task Status Mapping** → The Gateway proxies GET requests to the Python engine's `/api/v1/task_status/{task_id}` endpoint.
+7. **Task Execution & Resolution**:
+   - The Python engine processes the task in the background. It tiles the area, runs U-Net AI predictions, performs GIS post-processing, and calculates OSM damage metrics.
+   - Upon completion, the task state is updated to `"completed"` with the resulting data payload. If it fails, status becomes `"failed"` with the error.
+8. **Cinematic Render** → On a `"completed"` response, the frontend cancels the polling loop, maps the vector flood overlays, displays the metrics in the Right Panel, and triggers the 3D-to-2D tactical zoom transition.
 
 ---
 
@@ -180,7 +183,7 @@ Flood_SaaS_Project/
 ├── frontend/src/                    # Client — Tactical Mission Control UI
 │   ├── index.html                   # Main HTML shell (3-panel CSS Grid layout)
 │   ├── index.js                     # Core logic: Three.js globe, Leaflet map,
-│   │                                #   scan handler, transition choreography,
+│   │                                #   scan polling, transition choreography,
 │   │                                #   tactical progress stream, dossier loader
 │   ├── tactical.css                 # Full design system: CSS Grid layout, HUD,
 │   │                                #   glassmorphism panels, neon-glow accents,
@@ -192,13 +195,14 @@ Flood_SaaS_Project/
 │   ├── getStarfield.js              # Procedural star particle system
 │   └── textures/                    # Earth, cloud, and night-light texture maps
 │
-├── backend-node/                    # API Gateway — Express.js
-│   ├── server.js                    # Static file server + /api/scan proxy to Python
-│   └── package.json                 # Dependencies: express, axios, cors
+├── backend-node/                    # API Gateway & Deployment
+│   ├── worker.js                    # Serverless Cloudflare Worker (routing, CORS, proxy)
+│   ├── wrangler.toml                # Wrangler worker configuration metadata
+│   └── package.json                 # Worker dev dependencies
 │
 ├── ai-engine-python/                # AI Engine — FastAPI + TensorFlow
 │   ├── main.py                      # FastAPI app: /api/v1/analyze_flood endpoint,
-│   │                                #   dual-mode branching (single-tile vs grid),
+│   │                                #   dual-mode background branching, task status endpoint,
 │   │                                #   model lifecycle management
 │   ├── Dockerfile                   # Container configuration
 │   ├── core/
@@ -266,28 +270,49 @@ The engine will:
 - Start the FastAPI server on `http://localhost:8000`
 - Display `[API] Model loaded successfully. Server is READY.`
 
-### 4. Install & Start the Node.js Gateway
+### 4. Deploy the Cloudflare Worker API Gateway
+
+Ensure you have a Cloudflare account. Set your Hugging Face authentication token as a secret in your Worker:
 
 ```bash
 cd backend-node
 npm install
-node server.js
+npx wrangler secret put HF_TOKEN
+# Enter your Hugging Face Space Authorization Token when prompted
 ```
 
-The gateway will:
-- Serve the frontend static files
-- Proxy `/api/scan` requests to the Python engine
-- Start on `http://localhost:3000`
+Deploy the worker globally using wrangler:
 
-### 5. Open the Application
+```bash
+npx wrangler deploy
+```
 
-Navigate to **`http://localhost:3000`** in your browser. You will see the 3D Earth globe with the Mission Parameters panel on the left.
+The gateway worker will deploy to a subdomain under `*.workers.dev` (e.g., `https://flood-api-gateway.your-subdomain.workers.dev`). It will handle routing for the `/api/scan` and `/api/status/*` endpoints.
+
+### 5. Deploy the Frontend on Cloudflare Pages
+
+The frontend operates as a static site and is hosted globally via Cloudflare Pages:
+
+1. Push your repository to GitHub.
+2. Go to your **Cloudflare Dashboard** → **Workers & Pages** → **Create application** → **Pages** → **Connect to Git**.
+3. Select the `Flood_SaaS_Project` repository.
+4. Set the **Build settings**:
+   - **Framework preset**: `None` (Static HTML/JS)
+   - **Build command**: Leave blank
+   - **Build output directory**: `frontend`
+5. Click **Save and Deploy**.
+
+Cloudflare Pages will build the frontend and serve it at a public `https://*.pages.dev` URL.
 
 ---
 
 ## API Reference
 
-### `POST /api/v1/analyze_flood`
+The serverless architecture operates on a two-step asynchronous task polling model via the Cloudflare Worker API Gateway.
+
+### Step 1: Submit Scan Request
+
+`POST /api/scan` (Gateway) | `POST /api/v1/analyze_flood` (AI Engine)
 
 #### Request Body
 
@@ -309,23 +334,78 @@ Navigate to **`http://localhost:3000`** in your browser. You will see the 3D Ear
 | `longitude` | `float` | *required* | Target longitude (WGS-84) |
 | `start_date` | `string` | *required* | Observation window start (YYYY-MM-DD) |
 | `end_date` | `string` | *required* | Observation window end (YYYY-MM-DD) |
-| `radius_km` | `float` | `0` | Scan radius. `0` = single-tile legacy mode |
+| `radius_km` | `float` | `0` | Scan radius (km). `0` = single-tile legacy mode |
 | `tile_size_km` | `float` | `5.0` | Grid tile dimension (km) |
 | `max_workers` | `int` | `4` | Concurrent thread count for grid mode |
 
 #### Response
 
+Returns a task identifier immediately without waiting for AI analysis to complete.
+
 ```json
 {
-  "confidence_score": 99.73,
-  "metrics": {
-    "total_flood_area_sqkm": 42.7,
-    "buildings_damaged": 1247,
-    "roads_affected_km": 18.3,
-    "farmland_affected_sqkm": 31.2
-  },
-  "flood_geojson": { "type": "FeatureCollection", "features": [...] },
-  "grid_summary": { "total_tiles": 49, "ok": 47, "failed": 2 }
+  "task_id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+}
+```
+
+---
+
+### Step 2: Poll Task Status
+
+`GET /api/status/{task_id}` (Gateway) | `GET /api/v1/task_status/{task_id}` (AI Engine)
+
+#### URL Parameters
+
+| Parameter | Type | Description |
+|---|---|---|
+| `task_id` | `string` | UUID generated during Step 1 |
+
+#### Response (Processing)
+
+```json
+{
+  "status": "processing"
+}
+```
+
+#### Response (Completed)
+
+When task completion is successful, the full geospatially fused metrics are returned.
+
+```json
+{
+  "status": "completed",
+  "data": {
+    "status": "success",
+    "mode": "grid",
+    "confidence_score": 99.73,
+    "grid_summary": {
+      "total_tiles": 49,
+      "tiles_ok": 47,
+      "tiles_failed": 2
+    },
+    "metrics": {
+      "total_flood_area_sqkm": 42.7,
+      "buildings_damaged": 1247,
+      "roads_damaged_km": 18.3,
+      "farmland_damaged_sqkm": 31.2
+    },
+    "geojson": {
+      "type": "FeatureCollection",
+      "features": [...]
+    }
+  }
+}
+```
+
+#### Response (Failed)
+
+If an error occurs during satellite ingestion or inference processing.
+
+```json
+{
+  "status": "failed",
+  "error": "Failed to fetch satellite data. Clouds too dense or wrong dates."
 }
 ```
 
