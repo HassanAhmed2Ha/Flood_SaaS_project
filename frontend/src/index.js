@@ -495,7 +495,8 @@ scanBtn.addEventListener('click', async () => {
 
   // 6. Call the Node.js API Gateway
   try {
-    const response = await fetch('/api/scan', {
+    // TODO: Update '<YOUR_CLOUDFLARE_USERNAME>' with your actual Cloudflare account username
+    const response = await fetch('https://flood-api-gateway.<YOUR_CLOUDFLARE_USERNAME>.workers.dev/api/scan', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
