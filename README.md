@@ -64,66 +64,39 @@ Wide-area disaster scanning (up to **400 km²** per request) is achieved through
 
 ## System Architecture
 
-```
-============================= TACTICAL DATA FLOW SYSTEM =============================
-
-╔═══════════════════════════════════════════════════════════════════════════════════╗
-║                      [ FRONTEND HUD ] (Cloudflare Pages)                          ║
-║                                                                                   ║
-║   ┌───────────────────┐    ┌─────────────────────┐    ┌───────────────────────┐   ║
-║   │ Left Panel:       │    │ Center viewport:    │    │ Right Panel:          │   ║
-║   │ Coordinate Target │    │ Three.js 3D Globe   │    │ AI Inundation Gauges  │   ║
-║   │ Scan Parameters   │    │ 2D Leaflet Overlay  │    │ OSM Infrastructure    │   ║
-║   └─────────┬─────────┘    └─────────────────────┘    └───────────────────────┘   ║
-║             │                                                                     ║
-║             │ 1. POST /api/scan (Trigger Job)                                     ║
-║             ▼                                                                     ║
-║   ┌───────────────────────────────────────────────────────────────────────────┐   ║
-║   │ Bottom Panel: Live Asynchronous Polling System Log                        │   ║
-║   │ [ Polling Interval: 5s ] ◀─────────────────────────────────────────────┐  │   ║
-║   └────────────────────────────────────────────────────────────────────────│──┘   ║
-╚═════════════╤══════════════════════════════════════════════════════════════│══════╝
-              │                                                              │
-              │ 1. POST Request                                              │ 5. GET Status Loop
-              ▼                                                              │ (every 5 seconds)
-╔════════════════════════════════════════════════════════════════════════════│══════╗
-║             │        [ SERVERLESS API GATEWAY ] (Cloudflare Worker)        │      ║
-║             ▼                                                              │      ║
-║   ┌──────────────────────────────────┐                           ┌─────────┴──┐   ║
-║   │ CORS & Auth Header Handler       │                           │ Proxy GET  │   ║
-║   │ (Injects env.HF_TOKEN)           │                           │ Router     │   ║
-║   └─────────────────┬────────────────┘                           └─────▲──────┘   ║
-╚═════════════════════│══════════════════════════════════════════════════│══════════╝
-                      │                                                  │
-                      │ 2. Proxy Forward POST                            │ 4. Return Status Data
-                      ▼                                                  │ (completed/failed)
-╔════════════════════════════════════════════════════════════════════════│══════╗
-║             [ DETACHED ASYNCHRONOUS AI INFERENCE ENGINE ] (FastAPI)    │      ║
-║                                                                        │      ║
-║   ┌──────────────────────────────────┐                           ┌─────┴──────┐   ║
-║   │ FastAPI API Router:              │                           │ In-Memory  │   ║
-║   │ Enqueues BackgroundTasks         │──────────────────────────▶│ Tasks State│   ║
-║   │ Generates UUID task_id           │                           │ Repository │   ║
-║   └─────────────────┬────────────────┘                           └─────▲──────┘   ║
-║                     │                                                  │          ║
-║                     │ 3. Dispatches Asynchronous Process               │ Updates  ║
-║                     ▼                                                  │ State    ║
-║   ┌────────────────────────────────────────────────────────────────────│──────┐   ║
-║   │                   [ GRID-TILING ORCHESTRATOR ]                     │      ║
-║   │                                                                    │      ║
-║   │   ┌───────────────────┐     ┌───────────────────┐     ┌────────────┴──┐   │   ║
-║   │   │  1. GEE Fetcher   │───▶ │   2. Segmenter    │───▶ │ 3. GIS/OSM    │   │   ║
-║   │   │  8-Channel Bands  │     │   (U-Net Engine)  │     │ Post-Process  │   │   ║
-║   │   └─────────┬─────────┘     └───────────────────┘     └───────────────┘   │   ║
-║   └─────────────│─────────────────────────────────────────────────────────────┘   ║
-╚═════════════════│═════════════════════════════════════════════════════════════════╝
-                  │
-                  ▼ 3a. Parallel Geospatial Query (VV/VH, B2-B12)
-╔═══════════════════════════════════════════════════════════════════════════════════╗
-║                      [ EARTH ENGINE API DATALAKE ]                                ║
-║                                                                                   ║
-║            🛰️  Sentinel-1 Radar (GRD)   |   🛰️  Sentinel-2 Optical (MSI)         ║
-╚═══════════════════════════════════════════════════════════════════════════════════╝
+```text
+┌────────────────────────────────────────────────────────────────┐
+│                           CLIENT HUD                           │
+│                       (Cloudflare Pages)                       │
+└──────────────┬──────────────────────────────────▲──────────────┘
+               │                                  │
+               │ 1. POST /api/scan                │ 5. GET /api/status/{task_id}
+               │    (Submit Request)              │    (Poll Status Return)
+               ▼                                  │
+┌─────────────────────────────────────────────────┴──────────────┐
+│                   EDGE API GATEWAY (Worker)                    │
+└──────────────┬──────────────────────────────────▲──────────────┘
+               │                                  │
+               │ 2. Proxy POST /api/v1/...        │ 4. Proxy GET /api/v1/...
+               ▼                                  │
+┌─────────────────────────────────────────────────┴──────────────┐
+│                    AI ENGINE (FastAPI Host)                    │
+│      [BackgroundTasks] ───┐            [In-Memory Task Store]  │
+└───────────────────────────│────────────────────────────────────┘
+                            │
+                            │ 3. Dispatches Task
+                            ▼
+┌────────────────────────────────────────────────────────────────┐
+│                    GRID-TILING ORCHESTRATOR                    │
+│            (U-Net Segmenter & GIS Post-Processor)              │
+└──────────────────────────────┬─────────────────────────────────┘
+                               │
+                               │ 3a. Geospatial API Queries
+                               ▼
+┌────────────────────────────────────────────────────────────────┐
+│             GOOGLE EARTH ENGINE SATELLITE DATA                 │
+│             (Sentinel-1 & Sentinel-2 Archives)                 │
+└────────────────────────────────────────────────────────────────┘
 ```
 
 ### Request Lifecycle
@@ -475,6 +448,15 @@ To transition this tactical operations system into an active autonomous coordina
 3. **Automated Warning Dispatch & Ground Responder Routing**
    - Integrate with Twilio, WhatsApp, and CAP (Common Alerting Protocol) gateways to automatically broadcast localized emergency alerts to residents inside the predicted flood path.
    - Generate optimal multi-agent routing profiles (using pgRouting or OSRM) for search-and-rescue teams, routing around flooded roads and structurally compromised bridges.
+
+---
+
+## About the Developer
+
+Built by Hassan, a Bioinformatics student and AI/Remote Sensing Engineer passionate about geospatial intelligence.
+
+- [LinkedIn: Hassan Ahmed](https://www.linkedin.com/in/hassan-ahmed2007/)
+- [Portfolio: Hassan Ahmed](https://hassan-ahmed-portfolio.vercel.app/)
 
 ---
 
