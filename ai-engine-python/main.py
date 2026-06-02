@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field, field_validator, model_validator
 import uvicorn
 import os
@@ -10,6 +10,7 @@ from shapely.geometry import box
 import json
 import re
 from datetime import datetime
+import uuid
 
 # Core modules
 from core.gee_fetcher import fetch_8_channel_image
@@ -22,6 +23,9 @@ app = FastAPI(title="Flood Intelligence AI Engine", version="2.0")
 
 # Global model reference (loaded once at startup)
 flood_model = None
+
+# Global tasks store for background processing state
+tasks = {}
 
 # 2. Load model into memory on startup
 @app.on_event("startup")
@@ -70,156 +74,186 @@ class ScanRequest(BaseModel):
         return self
 
 
-# 4. Main analysis endpoint
-@app.post("/api/v1/analyze_flood")
-async def analyze_flood(request: ScanRequest):
+# 4. Background task runner
+def run_analyze_flood_in_background(task_id: str, request: ScanRequest):
     global flood_model
+    try:
+        if flood_model is None:
+            raise Exception("AI Model is not loaded. Check server logs.")
 
-    if flood_model is None:
-        raise HTTPException(status_code=500, detail="AI Model is not loaded. Check server logs.")
+        # ====================================================================
+        #  BRANCH A: Grid-Tiling Mode (radius_km > 0)
+        # ====================================================================
+        if request.radius_km > 0:
+            print(f"[Background Task] GRID MODE — radius={request.radius_km}km, "
+                  f"tile={request.tile_size_km}km, workers={request.max_workers}")
 
-    # ====================================================================
-    #  BRANCH A: Grid-Tiling Mode (radius_km > 0)
-    # ====================================================================
-    if request.radius_km > 0:
-        print(f"[API] GRID MODE — radius={request.radius_km}km, "
-              f"tile={request.tile_size_km}km, workers={request.max_workers}")
-
-        mosaic_path, overall_confidence, summary = run_grid_analysis(
-            model=flood_model,
-            center_lat=request.latitude,
-            center_lon=request.longitude,
-            start_date=request.start_date,
-            end_date=request.end_date,
-            radius_km=request.radius_km,
-            tile_size_km=request.tile_size_km,
-            max_workers=request.max_workers,
-        )
-
-        if not mosaic_path:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Grid analysis failed. {summary.get('failed', 0)} tiles returned no data."
+            mosaic_path, overall_confidence, summary = run_grid_analysis(
+                model=flood_model,
+                center_lat=request.latitude,
+                center_lon=request.longitude,
+                start_date=request.start_date,
+                end_date=request.end_date,
+                radius_km=request.radius_km,
+                tile_size_km=request.tile_size_km,
+                max_workers=request.max_workers,
             )
 
-        # Extract polygons from the mosaic mask
-        try:
-            with rasterio.open(mosaic_path) as src:
-                mosaic_mask = src.read(1)
-                mosaic_transform = src.transform
-                mosaic_crs = src.crs
-                bounds = src.bounds
+            if not mosaic_path:
+                raise Exception(f"Grid analysis failed. {summary.get('failed', 0)} tiles returned no data.")
 
-            flood_gdf = extract_and_optimize_polygons(mosaic_mask, mosaic_transform, mosaic_crs)
-
-            # OSM infrastructure analysis on the mosaic extent
-            img_poly = box(*bounds)
-            bounds_gdf = gpd.GeoDataFrame({'geometry': [img_poly]}, crs=mosaic_crs)
-            img_poly_4326 = bounds_gdf.to_crs("EPSG:4326").geometry.iloc[0]
-
+            # Extract polygons from the mosaic mask
             try:
+                with rasterio.open(mosaic_path) as src:
+                    mosaic_mask = src.read(1)
+                    mosaic_transform = src.transform
+                    mosaic_crs = src.crs
+                    bounds = src.bounds
+
+                flood_gdf = extract_and_optimize_polygons(mosaic_mask, mosaic_transform, mosaic_crs)
+
+                # OSM infrastructure analysis on the mosaic extent
+                img_poly = box(*bounds)
+                bounds_gdf = gpd.GeoDataFrame({'geometry': [img_poly]}, crs=mosaic_crs)
+                img_poly_4326 = bounds_gdf.to_crs("EPSG:4326").geometry.iloc[0]
+
+                try:
+                    osm_features = ox.features_from_polygon(
+                        img_poly_4326,
+                        tags={'building': True, 'highway': True, 'landuse': ['farmland']}
+                    ).to_crs("EPSG:3857").reset_index(drop=True)
+                except Exception as e:
+                    print(f"[WARNING] OSM fetch on mosaic extent: {e}")
+                    osm_features = gpd.GeoDataFrame()
+
+                report_dict = calculate_metrics_and_export(flood_gdf, osm_features, output_dir='flood_outputs')
+
+            except Exception as e:
+                raise Exception(f"Mosaic post-processing error: {str(e)}")
+
+            geojson_data = None
+            if os.path.exists(report_dict.get("geojson_path", "")):
+                with open(report_dict["geojson_path"], "r") as f:
+                    geojson_data = json.load(f)
+
+            tasks[task_id] = {
+                "status": "completed",
+                "data": {
+                    "status": "success",
+                    "mode": "grid",
+                    "confidence_score": round(overall_confidence, 2),
+                    "grid_summary": {
+                        "total_tiles": summary["total_tiles"],
+                        "tiles_ok": summary["ok"],
+                        "tiles_failed": summary["failed"],
+                    },
+                    "metrics": {
+                        "total_flood_area_sqkm": report_dict.get("total_flood_area_sqkm", 0),
+                        "buildings_damaged": report_dict.get("buildings_damaged", 0),
+                        "roads_damaged_km": report_dict.get("roads_damaged_km", 0),
+                        "farmland_damaged_sqkm": report_dict.get("farmland_damaged_sqkm", 0),
+                    },
+                    "geojson": geojson_data,
+                }
+            }
+
+        # ====================================================================
+        #  BRANCH B: Single-Tile Mode (legacy — radius_km == 0)
+        # ====================================================================
+        else:
+            print("[Background Task] SINGLE-TILE MODE (legacy)")
+            output_tif = f"flood_{request.latitude}_{request.longitude}.tif"
+
+            # الخطوة 1: جلب بيانات القمر الصناعي
+            tif_path = fetch_8_channel_image(
+                request.latitude,
+                request.longitude,
+                request.start_date,
+                request.end_date,
+                output_tif
+            )
+
+            if not tif_path:
+                raise Exception("Failed to fetch satellite data. Clouds too dense or wrong dates.")
+
+            # الخطوة 2: تشغيل الذكاء الاصطناعي والفلاتر الفيزيائية
+            try:
+                raw_ai_mask, img_transform, img_crs, ai_confidence, conf_map = predict_flood(flood_model, tif_path)
+            except Exception as e:
+                raise Exception(f"AI Processing Error: {str(e)}")
+
+            # الخطوة 3: المعالجة الجغرافية (GIS)
+            cleaned_mask = apply_morphological_filters(raw_ai_mask)
+            flood_metric_gdf = extract_and_optimize_polygons(cleaned_mask, img_transform, img_crs)
+
+            # الخطوة 4: جلب بيانات البنية التحتية من OpenStreetMap
+            print("[INFO] Fetching infrastructure data from OSM...")
+            try:
+                with rasterio.open(tif_path) as src:
+                    bounds = src.bounds
+                img_poly = box(*bounds)
+                bounds_gdf = gpd.GeoDataFrame({'geometry': [img_poly]}, crs=img_crs)
+                img_poly_4326 = bounds_gdf.to_crs("EPSG:4326").geometry.iloc[0]
+
                 osm_features = ox.features_from_polygon(
                     img_poly_4326,
                     tags={'building': True, 'highway': True, 'landuse': ['farmland']}
                 ).to_crs("EPSG:3857").reset_index(drop=True)
             except Exception as e:
-                print(f"[WARNING] OSM fetch on mosaic extent: {e}")
+                print(f"[WARNING] No OSM infrastructure found or error: {e}")
                 osm_features = gpd.GeoDataFrame()
 
-            report_dict = calculate_metrics_and_export(flood_gdf, osm_features, output_dir='flood_outputs')
+            # الخطوة 5: حساب الخسائر وتصدير الملفات
+            report_dict = calculate_metrics_and_export(flood_metric_gdf, osm_features, output_dir='flood_outputs')
 
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Mosaic post-processing error: {str(e)}")
+            # الخطوة 6: قراءة ملف GeoJSON ودمجه في الرد المباشر
+            geojson_data = None
+            if os.path.exists(report_dict.get("geojson_path", "")):
+                with open(report_dict["geojson_path"], "r") as f:
+                    geojson_data = json.load(f)
 
-        geojson_data = None
-        if os.path.exists(report_dict.get("geojson_path", "")):
-            with open(report_dict["geojson_path"], "r") as f:
-                geojson_data = json.load(f)
+            tasks[task_id] = {
+                "status": "completed",
+                "data": {
+                    "status": "success",
+                    "mode": "single",
+                    "confidence_score": round(ai_confidence, 2),
+                    "metrics": {
+                        "total_flood_area_sqkm": report_dict.get("total_flood_area_sqkm", 0),
+                        "buildings_damaged": report_dict.get("buildings_damaged", 0),
+                        "roads_damaged_km": report_dict.get("roads_damaged_km", 0),
+                        "farmland_damaged_sqkm": report_dict.get("farmland_damaged_sqkm", 0)
+                    },
+                    "geojson": geojson_data
+                }
+            }
 
-        return {
-            "status": "success",
-            "mode": "grid",
-            "confidence_score": round(overall_confidence, 2),
-            "grid_summary": {
-                "total_tiles": summary["total_tiles"],
-                "tiles_ok": summary["ok"],
-                "tiles_failed": summary["failed"],
-            },
-            "metrics": {
-                "total_flood_area_sqkm": report_dict.get("total_flood_area_sqkm", 0),
-                "buildings_damaged": report_dict.get("buildings_damaged", 0),
-                "roads_damaged_km": report_dict.get("roads_damaged_km", 0),
-                "farmland_damaged_sqkm": report_dict.get("farmland_damaged_sqkm", 0),
-            },
-            "geojson": geojson_data,
-        }
-
-    # ====================================================================
-    #  BRANCH B: Single-Tile Mode (legacy — radius_km == 0)
-    # ====================================================================
-    print("[API] SINGLE-TILE MODE (legacy)")
-    output_tif = f"flood_{request.latitude}_{request.longitude}.tif"
-
-    # الخطوة 1: جلب بيانات القمر الصناعي
-    tif_path = fetch_8_channel_image(
-        request.latitude,
-        request.longitude,
-        request.start_date,
-        request.end_date,
-        output_tif
-    )
-
-    if not tif_path:
-        raise HTTPException(status_code=404, detail="Failed to fetch satellite data. Clouds too dense or wrong dates.")
-
-    # الخطوة 2: تشغيل الذكاء الاصطناعي والفلاتر الفيزيائية
-    try:
-        raw_ai_mask, img_transform, img_crs, ai_confidence, conf_map = predict_flood(flood_model, tif_path)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"AI Processing Error: {str(e)}")
+        tasks[task_id] = {"status": "failed", "error": str(e)}
 
-    # الخطوة 3: المعالجة الجغرافية (GIS)
-    cleaned_mask = apply_morphological_filters(raw_ai_mask)
-    flood_metric_gdf = extract_and_optimize_polygons(cleaned_mask, img_transform, img_crs)
 
-    # الخطوة 4: جلب بيانات البنية التحتية من OpenStreetMap
-    print("[INFO] Fetching infrastructure data from OSM...")
-    try:
-        with rasterio.open(tif_path) as src:
-            bounds = src.bounds
-        img_poly = box(*bounds)
-        bounds_gdf = gpd.GeoDataFrame({'geometry': [img_poly]}, crs=img_crs)
-        img_poly_4326 = bounds_gdf.to_crs("EPSG:4326").geometry.iloc[0]
+# 5. Main analysis endpoint (scheduling background task)
+@app.post("/api/v1/analyze_flood")
+async def analyze_flood(request: ScanRequest, background_tasks: BackgroundTasks):
+    global flood_model
 
-        osm_features = ox.features_from_polygon(
-            img_poly_4326,
-            tags={'building': True, 'highway': True, 'landuse': ['farmland']}
-        ).to_crs("EPSG:3857").reset_index(drop=True)
-    except Exception as e:
-        print(f"[WARNING] No OSM infrastructure found or error: {e}")
-        osm_features = gpd.GeoDataFrame()
+    if flood_model is None:
+        raise HTTPException(status_code=500, detail="AI Model is not loaded. Check server logs.")
 
-    # الخطوة 5: حساب الخسائر وتصدير الملفات
-    report_dict = calculate_metrics_and_export(flood_metric_gdf, osm_features, output_dir='flood_outputs')
+    task_id = str(uuid.uuid4())
+    tasks[task_id] = {"status": "processing"}
+    background_tasks.add_task(run_analyze_flood_in_background, task_id, request)
 
-    # الخطوة 6: قراءة ملف GeoJSON ودمجه في الرد المباشر
-    geojson_data = None
-    if os.path.exists(report_dict.get("geojson_path", "")):
-        with open(report_dict["geojson_path"], "r") as f:
-            geojson_data = json.load(f)
+    return {"task_id": task_id}
 
-    return {
-        "status": "success",
-        "mode": "single",
-        "confidence_score": round(ai_confidence, 2),
-        "metrics": {
-            "total_flood_area_sqkm": report_dict.get("total_flood_area_sqkm", 0),
-            "buildings_damaged": report_dict.get("buildings_damaged", 0),
-            "roads_damaged_km": report_dict.get("roads_damaged_km", 0),
-            "farmland_damaged_sqkm": report_dict.get("farmland_damaged_sqkm", 0)
-        },
-        "geojson": geojson_data
-    }
+
+# 6. Task status endpoint
+@app.get("/api/v1/task_status/{task_id}")
+async def get_task_status(task_id: str):
+    if task_id not in tasks:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return tasks[task_id]
+
 
 
 # Run server

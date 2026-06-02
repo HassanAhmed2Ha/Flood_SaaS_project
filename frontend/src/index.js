@@ -509,50 +509,92 @@ scanBtn.addEventListener('click', async () => {
       })
     });
 
-    // CRITICAL: Stop the progress stream before showing results
-    clearInterval(progressInterval);
-
     const data = await response.json();
 
-    if (response.ok) {
-      // === SUCCESS ===
-      statusBox.innerHTML = `[SUCCESS] AI Confidence: ${data.confidence_score}%<br>
-                                   Flood Area: ${data.metrics.total_flood_area_sqkm} sq km<br>
-                                   Buildings Damaged: ${data.metrics.buildings_damaged}<br>
-                                   <span style="color:#00aaff;font-size:11px;">Initiating tactical zoom...</span>`;
-      statusBox.style.color = "#fff";
-      statusBox.style.borderLeftColor = "#00aaff";
-      statusBox.style.background = "rgba(0, 170, 255, 0.15)";
+    if (response.ok && data.task_id) {
+      const task_id = data.task_id;
+      // Stop the initial quick progress interval as we transition to polling
+      clearInterval(progressInterval);
+
+      statusBox.innerHTML = `[SYS] Task scheduled.<br>Task ID: ${task_id}<br><span style="color:#00ccff;opacity:0.85;">[SYS] Processing large grid. Polling for results...</span>`;
       statusBox.scrollTop = statusBox.scrollHeight;
 
-      scanBtn.innerText = "VIEW TACTICAL MAP";
-      scanBtn.style.background = "linear-gradient(135deg, #0055cc, #0088ff)";
+      // Start polling status
+      const pollingInterval = setInterval(async () => {
+        try {
+          const statusRes = await fetch(`https://flood-api-gateway.hassanahmed07-e9.workers.dev/api/status/${task_id}`);
+          if (!statusRes.ok) {
+            throw new Error(`HTTP Error ${statusRes.status}`);
+          }
+          const taskState = await statusRes.json();
 
-      // Brief pause to show success, then begin the cinematic zoom
-      setTimeout(() => {
-        transitionToTacticalMap(lat, lon, data);
-      }, 800);
+          if (taskState.status === "completed") {
+            clearInterval(pollingInterval);
+            const finalData = taskState.data;
+
+            statusBox.innerHTML = `[SUCCESS] AI Confidence: ${finalData.confidence_score}%<br>
+                                   Flood Area: ${finalData.metrics.total_flood_area_sqkm} sq km<br>
+                                   Buildings Damaged: ${finalData.metrics.buildings_damaged}<br>
+                                   <span style="color:#00aaff;font-size:11px;">Initiating tactical zoom...</span>`;
+            statusBox.style.color = "#fff";
+            statusBox.style.borderLeftColor = "#00aaff";
+            statusBox.style.background = "rgba(0, 170, 255, 0.15)";
+            statusBox.scrollTop = statusBox.scrollHeight;
+
+            scanBtn.innerText = "VIEW TACTICAL MAP";
+            scanBtn.style.background = "linear-gradient(135deg, #0055cc, #0088ff)";
+            scanBtn.disabled = false;
+            isScanning = false;
+
+            // Brief pause to show success, then begin the cinematic zoom
+            setTimeout(() => {
+              transitionToTacticalMap(lat, lon, finalData);
+            }, 800);
+
+          } else if (taskState.status === "failed") {
+            clearInterval(pollingInterval);
+            statusBox.innerHTML = `[ERROR] Task execution failed.<br><span style="color:#ff4444;font-size:11px;">${taskState.error || 'Unknown error'}</span>`;
+            statusBox.style.borderLeftColor = "red";
+            statusBox.style.background = "rgba(255, 0, 0, 0.1)";
+            statusBox.scrollTop = statusBox.scrollHeight;
+            scanBtn.innerText = "SCAN FAILED — RETRY";
+            scanBtn.style.background = "linear-gradient(135deg, #cc2200, #ff4444)";
+            scanBtn.disabled = false;
+            isScanning = false;
+          } else {
+            // Task is still "processing"
+            statusBox.innerHTML = `[SYS] Task ID: ${task_id}<br><span style="color:#00ccff;opacity:0.85;">[SYS] Processing large grid. Polling for results...</span>`;
+            statusBox.scrollTop = statusBox.scrollHeight;
+          }
+        } catch (pollErr) {
+          // If polling fails temporarily (network issue), keep polling or show error
+          console.warn("[Polling] Error checking task status:", pollErr.message);
+          statusBox.innerHTML += `<br><span style="color:#ffcc00;font-size:11px;">[WARN] Retrying connection: ${pollErr.message}</span>`;
+          statusBox.scrollTop = statusBox.scrollHeight;
+        }
+      }, 5000); // Poll every 5 seconds
 
     } else {
-      statusBox.innerHTML = `[ERROR] ${data.error}`;
+      clearInterval(progressInterval);
+      const errMsg = data.detail || data.error || "Failed to schedule task.";
+      statusBox.innerHTML = `[ERROR] ${errMsg}`;
       statusBox.style.borderLeftColor = "red";
       statusBox.style.background = "rgba(255, 0, 0, 0.1)";
       statusBox.scrollTop = statusBox.scrollHeight;
       scanBtn.innerText = "SCAN FAILED — RETRY";
       scanBtn.style.background = "linear-gradient(135deg, #cc2200, #ff4444)";
+      scanBtn.disabled = false;
+      isScanning = false;
     }
   } catch (error) {
-    // CRITICAL: Stop the progress stream on network errors too
     clearInterval(progressInterval);
-
     statusBox.innerHTML = `[CRITICAL ERROR] Connection to Gateway lost.<br><span style="color:#ff4444;font-size:11px;">${error.message}</span>`;
     statusBox.style.borderLeftColor = "red";
     statusBox.style.background = "rgba(255, 0, 0, 0.1)";
     statusBox.scrollTop = statusBox.scrollHeight;
     scanBtn.innerText = "RECONNECT";
-  } finally {
-    isScanning = false;
     scanBtn.disabled = false;
+    isScanning = false;
   }
 });
 
