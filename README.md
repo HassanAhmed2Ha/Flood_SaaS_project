@@ -60,57 +60,130 @@ A **Smart Cloud Fallback** safety net prevents model hallucination when dense cl
 
 ### Architecture Philosophy
 
-Wide-area disaster scanning (up to **400 km²** per request) is achieved through a **CPU-optimized Grid-Tiling Engine** that subdivides the area of interest into 5×5 km tiles, fetches satellite data concurrently via `ThreadPoolExecutor`, runs per-tile AI inference, and mosaics the results into a seamless output raster. This design eliminates Earth Engine timeout failures and operates without GPU dependencies — suitable for serverless or containerized deployment.
-
----
-
-## System Architecture
+Wide-area disaster scanning (up to **400 km²** per request) is achieved through a **CPU-optimized Grid-Tiling Engine** that subdivides the area of interest into 5×5 km tiles, fetches satellite data concurrently via `ThreadPoolExecutor`, runs per-tile AI inference, and mosaics the results into a seamless output raster. This design eliminates Earth Engine timeout failures and operates without GPU dependencies — suitable for serverless or containerized## System Architecture
 
 ```
-┌───────────────────────────────────────────────────────────────────┐
-│              FRONTEND (Hosted on Cloudflare Pages)               │
-│  Vanilla JS · Three.js Globe · Leaflet Map · Tactical HUD       │
-│  ┌─────────────┐ ┌──────────────┐ ┌──────────────────────────┐   │
-│  │ Left Panel  │ │ 3D Globe /   │ │ Right Panel              │   │
-│  │ Mission     │ │ 2D Tactical  │ │ AI Confidence Gauge      │   │
-│  │ Parameters  │ │ Map View     │ │ Damage Metrics           │   │
-│  └─────────────┘ └──────────────┘ └──────────────────────────┘   │
-│  ┌──────────────────────────────────────────────────────────────┐ │
-│  │ Bottom Panel — System Log (dynamic asynchronous polling)    │ │
-│  └──────────────────────────────────────────────────────────────┘ │
-└──────────────┬────────────────────────▲───────────────────────────┘
-               │ 1. POST /api/scan      │ 3. GET /api/status/{task_id} (every 5s)
-               ▼                        │
-┌───────────────────────────────────────┴──────────────────────────┐
-│           API GATEWAY (Cloudflare Serverless Worker)              │
-│  Intercepts requests, handles CORS preflights, injects auth.    │
-└──────────────┬────────────────────────▲──────────────────────────┘
-               │ 2. Forward POST        │ 4. Forward GET status
-               ▼                        │
-┌───────────────────────────────────────┴──────────────────────────┐
-│      PYTHON FASTAPI AI ENGINE (Hugging Face Space / FastAPI)     │
-│  Uses BackgroundTasks to process grid analysis asynchronously.    │
-│  Tracks status in-memory via uuid task ID keys.                  │
-│                                                                  │
-│  ┌──────────┐   ┌──────────────┐   ┌──────────────────────────┐  │
-│  │ GEE      │──▶│ AI           │──▶│ GIS Post-Processing      │  │
-│  │ Fetcher  │   │ Segmentation │   │ Morphological Filtering  │  │
-│  │          │   │ (U-Net)      │   │ Polygon Extraction       │  │
-│  └──────────┘   └──────────────┘   │ OSM Damage Assessment    │  │
-│                                    └──────────────────────────┘  │
-│  ┌──────────────────────────────────────────────────────────────┐ │
-│  │         Grid Orchestrator (Wide-Area Tiling Mode)            │ │
-│  │  generate_grid → ThreadPoolExecutor → rasterio.merge         │ │
-│  └──────────────────────────────────────────────────────────────┘ │
-└───────────────────────────────────────┬──────────────────────────┘
-                                        │
-                                        ▼
-                           ┌─────────────────────────┐
-                           │  Google Earth Engine    │
-                           │  Sentinel-1 SAR (GRD)  │
-                           │  Sentinel-2 MSI        │
-                           └─────────────────────────┘
+============================= TACTICAL DATA FLOW SYSTEM =============================
+
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║                      [ FRONTEND HUD ] (Cloudflare Pages)                          ║
+║                                                                                   ║
+║   ┌───────────────────┐    ┌─────────────────────┐    ┌───────────────────────┐   ║
+║   │ Left Panel:       │    │ Center viewport:    │    │ Right Panel:          │   ║
+║   │ Coordinate Target │    │ Three.js 3D Globe   │    │ AI Inundation Gauges  │   ║
+║   │ Scan Parameters   │    │ 2D Leaflet Overlay  │    │ OSM Infrastructure    │   ║
+║   └─────────┬─────────┘    └─────────────────────┘    └───────────────────────┘   ║
+║             │                                                                     ║
+║             │ 1. POST /api/scan (Trigger Job)                                     ║
+║             ▼                                                                     ║
+║   ┌───────────────────────────────────────────────────────────────────────────┐   ║
+║   │ Bottom Panel: Live Asynchronous Polling System Log                        │   ║
+║   │ [ Polling Interval: 5s ] ◀─────────────────────────────────────────────┐  │   ║
+║   └────────────────────────────────────────────────────────────────────────│──┘   ║
+╚═════════════╤══════════════════════════════════════════════════════════════│══════╝
+              │                                                              │
+              │ 1. POST Request                                              │ 5. GET Status Loop
+              ▼                                                              │ (every 5 seconds)
+╔════════════════════════════════════════════════════════════════════════════│══════╗
+║             │        [ SERVERLESS API GATEWAY ] (Cloudflare Worker)        │      ║
+║             ▼                                                              │      ║
+║   ┌──────────────────────────────────┐                           ┌─────────┴──┐   ║
+║   │ CORS & Auth Header Handler       │                           │ Proxy GET  │   ║
+║   │ (Injects env.HF_TOKEN)           │                           │ Router     │   ║
+║   └─────────────────┬────────────────┘                           └─────▲──────┘   ║
+╚═════════════════════│══════════════════════════════════════════════════│══════════╝
+                      │                                                  │
+                      │ 2. Proxy Forward POST                            │ 4. Return Status Data
+                      ▼                                                  │ (completed/failed)
+╔════════════════════════════════════════════════════════════════════════│══════╗
+║             [ DETACHED ASYNCHRONOUS AI INFERENCE ENGINE ] (FastAPI)    │      ║
+║                                                                        │      ║
+║   ┌──────────────────────────────────┐                           ┌─────┴──────┐   ║
+║   │ FastAPI API Router:              │                           │ In-Memory  │   ║
+║   │ Enqueues BackgroundTasks         │──────────────────────────▶│ Tasks State│   ║
+║   │ Generates UUID task_id           │                           │ Repository │   ║
+║   └─────────────────┬────────────────┘                           └─────▲──────┘   ║
+║                     │                                                  │          ║
+║                     │ 3. Dispatches Asynchronous Process               │ Updates  ║
+║                     ▼                                                  │ State    ║
+║   ┌────────────────────────────────────────────────────────────────────│──────┐   ║
+║   │                   [ GRID-TILING ORCHESTRATOR ]                     │      ║
+║   │                                                                    │      ║
+║   │   ┌───────────────────┐     ┌───────────────────┐     ┌────────────┴──┐   │   ║
+║   │   │  1. GEE Fetcher   │───▶ │   2. Segmenter    │───▶ │ 3. GIS/OSM    │   │   ║
+║   │   │  8-Channel Bands  │     │   (U-Net Engine)  │     │ Post-Process  │   │   ║
+║   │   └─────────┬─────────┘     └───────────────────┘     └───────────────┘   │   ║
+║   └─────────────│─────────────────────────────────────────────────────────────┘   ║
+╚═════════════════│═════════════════════════════════════════════════════════════════╝
+                  │
+                  ▼ 3a. Parallel Geospatial Query (VV/VH, B2-B12)
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║                      [ EARTH ENGINE API DATALAKE ]                                ║
+║                                                                                   ║
+║            🛰️  Sentinel-1 Radar (GRD)   |   🛰️  Sentinel-2 Optical (MSI)         ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
 ```
+
+<details>
+<summary>🖥️ View Interactive Cyberpunk Flowchart (HTML/CSS)</summary>
+
+<div class="cyber-flowchart" style="background-color: #0a0f1e; color: #00e5ff; font-family: 'JetBrains Mono', 'Space Mono', monospace; padding: 30px; border: 1px solid #00aaff; box-shadow: 0 0 15px rgba(0, 170, 255, 0.2); position: relative; margin: 20px 0; border-radius: 4px;">
+  <!-- Corner Brackets -->
+  <div style="position: absolute; top: 5px; left: 5px; border-top: 2px solid #00aaff; border-left: 2px solid #00aaff; width: 12px; height: 12px;"></div>
+  <div style="position: absolute; top: 5px; right: 5px; border-top: 2px solid #00aaff; border-right: 2px solid #00aaff; width: 12px; height: 12px;"></div>
+  <div style="position: absolute; bottom: 5px; left: 5px; border-bottom: 2px solid #00aaff; border-left: 2px solid #00aaff; width: 12px; height: 12px;"></div>
+  <div style="position: absolute; bottom: 5px; right: 5px; border-bottom: 2px solid #00aaff; border-right: 2px solid #00aaff; width: 12px; height: 12px;"></div>
+
+  <div style="text-align: center; margin-bottom: 25px; border-bottom: 1px dashed rgba(0, 170, 255, 0.4); padding-bottom: 10px;">
+    <span style="font-weight: bold; letter-spacing: 2px; text-transform: uppercase;">Tactical System Architecture</span>
+  </div>
+
+  <div style="display: flex; flex-direction: column; align-items: center; gap: 20px;">
+    
+    <!-- User Input Node -->
+    <div style="background-color: rgba(0, 170, 255, 0.05); border: 1px dashed #00aaff; padding: 15px 25px; border-radius: 2px; text-align: center; width: 280px; box-sizing: border-box;">
+      <div style="font-size: 0.8em; color: #888;">[01] CLIENT TERMINAL</div>
+      <div style="font-weight: bold; margin-top: 5px;">User Input & Parameters</div>
+      <div style="font-size: 0.85em; color: rgba(0, 229, 255, 0.8); margin-top: 5px;">Coordinate, Date, Radius</div>
+    </div>
+
+    <!-- Arrow 1 -->
+    <div style="color: #00aaff; font-weight: bold;">▼ POST /api/scan</div>
+
+    <!-- API Gateway Node -->
+    <div style="background-color: rgba(0, 170, 255, 0.1); border: 1px solid #00aaff; box-shadow: 0 0 10px rgba(0, 170, 255, 0.1); padding: 18px 25px; border-radius: 2px; text-align: center; width: 320px; box-sizing: border-box; position: relative;">
+      <div style="position: absolute; top: -1px; left: 10px; background: #0a0f1e; padding: 0 5px; font-size: 0.7em; color: #00aaff;">EDGE GATEWAY</div>
+      <div style="font-weight: bold; color: #fff;">API Gateway (Cloudflare Worker)</div>
+      <div style="font-size: 0.8em; color: #88aaff; margin-top: 5px;">Auth Injection (HF_TOKEN) & CORS Handlers</div>
+    </div>
+
+    <!-- Double Arrow Flow & Polling Loop -->
+    <div style="display: flex; justify-content: space-between; width: 340px; font-size: 0.8em; padding: 0 10px;">
+      <div style="color: #00aaff;">▼ Proxy POST</div>
+      <div style="color: #ff0055; font-weight: bold;">▲ GET Task Polling (5s)</div>
+    </div>
+
+    <!-- AI Engine Node -->
+    <div style="background-color: rgba(0, 170, 255, 0.1); border: 1px solid #00aaff; box-shadow: 0 0 10px rgba(0, 170, 255, 0.1); padding: 18px 25px; border-radius: 2px; text-align: center; width: 320px; box-sizing: border-box; position: relative;">
+      <div style="position: absolute; top: -1px; left: 10px; background: #0a0f1e; padding: 0 5px; font-size: 0.7em; color: #00aaff;">AI ENGINE</div>
+      <div style="font-weight: bold; color: #fff;">AI Engine (FastAPI)</div>
+      <div style="font-size: 0.8em; color: #88aaff; margin-top: 5px;">BackgroundTasks Orchestration & Tasks State Store</div>
+    </div>
+
+    <!-- Arrow 3 -->
+    <div style="color: #00aaff; font-weight: bold;">▼ Parallel GIS & Satellite Fetch</div>
+
+    <!-- Google Earth Engine Node -->
+    <div style="background-color: rgba(0, 229, 255, 0.03); border: 1px dashed rgba(0, 170, 255, 0.5); padding: 15px 25px; border-radius: 2px; text-align: center; width: 280px; box-sizing: border-box;">
+      <div style="font-size: 0.8em; color: #888;">[04] TELESPECTRAL DATA</div>
+      <div style="font-weight: bold; color: #fff;">Google Earth Engine</div>
+      <div style="font-size: 0.8em; color: #88aaff; margin-top: 5px;">Sentinel-1 (SAR) & Sentinel-2 (MSI)</div>
+    </div>
+
+  </div>
+</div>
+
+</details>
 
 ### Request Lifecycle
 
