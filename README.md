@@ -168,7 +168,7 @@ This conditional safety net was engineered specifically to handle the failure mo
 ![Radar Validation Histogram](./image.png)
 
 *Fig 1: The engine successfully applying the SAR physical threshold (-15 dB) during a 100% cloud-cover event (Optical RGB is blank), accurately isolating flood polygons from background land.*
-
+> 📊 **Dataset Reference:** This validation relies on the [Sen1Floods11: 8-Channel Remote Sensing Dataset](https://www.kaggle.com/datasets/oindrieelmondal/sen1floods11-8-channel-remote-sensing-dataset), which provides the multi-spectral and SAR ground-truth pairs necessary for calibrating our fusion model.
 ### 4. Post-Processing Pipeline
 
 1. **Morphological Smoothing** — Binary opening + closing with a 3×3 structuring element removes salt-and-pepper noise.
