@@ -128,16 +128,16 @@ Wide-area disaster scanning (up to **400 km²** per request) is achieved through
 
 ### Request Lifecycle
 
-1. **User Input** → The operator enters target coordinates, date range, and scan radius on the Left Panel.
-2. **Task Creation (POST)** → The frontend fires a `<kbd>POST /api/scan</kbd>` to the Cloudflare Worker API Gateway.
-3. **Gateway Forwarding** → The Cloudflare Worker injects the `<kbd>HF_TOKEN</kbd>` authorization header and forwards the request to the Python engine's `<kbd>/api/v1/analyze_flood</kbd>` endpoint.
-4. **Immediate Scheduling** → The Python engine generates a unique `<kbd>task_id</kbd>` (UUID), stores a status of `"processing"` in-memory, schedules the execution to run on FastAPI's `<kbd>BackgroundTasks</kbd>`, and returns `{"task_id": "uuid"}` back through the Gateway to the client in under 500ms.
-5. **Asynchronous Polling Loop (GET)** → The frontend receives the `<kbd>task_id</kbd>`, clears the initial progress stream, and begins querying `<kbd>GET /api/status/{task_id}</kbd>` via the Cloudflare Worker Gateway every 5 seconds.
-6. **Task Status Mapping** → The Gateway proxies GET requests to the Python engine's `<kbd>/api/v1/task_status/{task_id}</kbd>` endpoint.
-7. **Task Execution & Resolution**:
-   - The Python engine processes the task in the background. It tiles the area, runs U-Net AI predictions, performs GIS post-processing, and calculates OSM damage metrics.
-   - Upon completion, the task state is updated to `"completed"` with the resulting data payload. If it fails, status becomes `"failed"` with the error.
-8. **Cinematic Render** → On a `"completed"` response, the frontend cancels the polling loop, maps the vector flood overlays, displays the metrics in the Right Panel, and triggers the 3D-to-2D tactical zoom transition.
+1. **User Input** — The operator enters target coordinates, date range, and scan radius on the Left Panel.
+2. **Task Creation** — The frontend fires a `POST /api/scan` request to the Cloudflare Worker API Gateway.
+3. **Gateway Forwarding** — The Cloudflare Worker injects the `HF_TOKEN` authorization header and forwards the request to the Python engine's `/api/v1/analyze_flood` endpoint.
+4. **Immediate Scheduling** — The Python engine generates a unique `task_id` (UUID), stores a status of `"processing"` in-memory, schedules the execution to run on FastAPI's `BackgroundTasks`, and returns `{"task_id": "uuid"}` back through the Gateway to the client in under 500ms.
+5. **Asynchronous Polling Loop** — The frontend receives the `task_id`, clears the initial progress stream, and begins querying `GET /api/status/{task_id}` via the Cloudflare Worker Gateway every 5 seconds.
+6. **Task Status Mapping** — The Gateway proxies `GET` requests to the Python engine's `/api/v1/task_status/{task_id}` endpoint.
+7. **Task Execution & Resolution** — The Python engine processes the task in the background:
+   - It tiles the area, runs U-Net AI predictions, performs GIS post-processing, and calculates OSM damage metrics.
+   - Upon completion, the task state is updated to `"completed"` with the resulting data payload. If it fails, the status becomes `"failed"` with the error.
+8. **Cinematic Render** — On a `"completed"` response, the frontend cancels the polling loop, maps the vector flood overlays, displays the metrics in the Right Panel, and triggers the 3D-to-2D tactical zoom transition.
 
 ---
 
@@ -296,12 +296,12 @@ cd Flood_SaaS_Project
 ### 2. Configure Google Earth Engine
 
 Place your GEE service account credentials at:
-`<kbd>ai-engine-python/auth/gee_service_account.json</kbd>`
+`ai-engine-python/auth/gee_service_account.json`
 
 > [!WARNING]
 > Ensure the service account has active Google Earth Engine API access enabled in your Google Cloud Console.
 
-Update the project ID in `<kbd>core/gee_fetcher.py</kbd>`:
+Update the project ID in `core/gee_fetcher.py`:
 
 ```python
 ee.Initialize(project='YOUR_GEE_PROJECT_ID')
@@ -316,7 +316,7 @@ pip install -r ../requirements.txt
 python main.py
 ```
 
-The engine will load the U-Net model weights into memory and start the server at `<kbd>http://localhost:8000</kbd>`.
+The engine will load the U-Net model weights into memory and start the server at `http://localhost:8000`.
 
 ### 4. Deploy the Cloudflare Worker API Gateway
 
@@ -348,7 +348,7 @@ The frontend operates as a static site and is hosted globally via Cloudflare Pag
 4. Set the **Build settings**:
    - **Framework preset**: `None` (Static HTML/JS)
    - **Build command**: Leave blank
-   - **Build output directory**: `<kbd>frontend/src</kbd>`
+   - **Build output directory**: `frontend/src`
 5. Click **Save and Deploy**.
 
 Cloudflare Pages will build the frontend and serve it at a public `https://*.pages.dev` URL.
