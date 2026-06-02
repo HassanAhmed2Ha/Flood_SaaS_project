@@ -16,7 +16,7 @@
 <br>
 
 [![Live Demo](https://img.shields.io/badge/Live_Demo-Online-success?style=for-the-badge)](https://flood-saas-project.pages.dev)
-[![AI Engine](https://img.shields.io/badge/AI_Engine-Running-blue?style=for-the-badge)](https://hassan2007-flood-intelligence-engine.hf.space/docs)
+
 
 </div>
 
@@ -27,6 +27,7 @@
 - [Philosophy & Vision](#philosophy--vision)
 - [System Architecture](#system-architecture)
 - [Core Methodology & AI Logic](#core-methodology--ai-logic)
+- [System Constraints & Sensor Limitations](#system-constraints--sensor-limitations)
 - [Directory Structure & File Roles](#directory-structure--file-roles)
 - [Setup & Execution](#setup--execution)
 - [API Reference](#api-reference)
@@ -46,10 +47,9 @@ The frontend rejects conventional dashboard design in favor of a **Cyberpunk / G
 When a scan completes, a choreographed camera interpolation zooms the globe into the target coordinates, cross-fading into a 2D Leaflet tactical map where georeferenced flood polygons are overlaid in real time.
 
 <div align="center">
-  <img src="3D_MAP.png" width="48%" alt="3D Tactical Mission Globe View" />
-  <img src="2D_MAP.png" width="48%" alt="2D Tactical Flood Extent View" />
+  <img src="demo.gif" width="90%" alt="Tactical Mission Control Interface Demo" />
   <br>
-  <sub><strong>Figure:</strong> Tactical Mission Control HUD — 3D Global Overview and 2D Localized Flood Extent Analysis</sub>
+  <sub><strong>Figure:</strong> Live Tactical Mission Control Interface — Seamless 3D Global Overview to 2D Flood Extent Transition</sub>
 </div>
 
 ### AI Philosophy
@@ -115,11 +115,11 @@ Wide-area disaster scanning (up to **400 km²** per request) is achieved through
 ### Request Lifecycle
 
 1. **User Input** → The operator enters target coordinates, date range, and scan radius on the Left Panel.
-2. **Task Creation (POST)** → The frontend fires a `POST /api/scan` to the Cloudflare Worker API Gateway.
-3. **Gateway Forwarding** → The Cloudflare Worker injects the `HF_TOKEN` authorization header and forwards the request to the Python engine's `/api/v1/analyze_flood` endpoint.
-4. **Immediate Scheduling** → The Python engine generates a unique `task_id` (UUID), stores a status of `"processing"` in-memory, schedules the execution to run on FastAPI's `BackgroundTasks`, and returns `{"task_id": "uuid"}` back through the Gateway to the client in under 500ms.
-5. **Asynchronous Polling Loop (GET)** → The frontend receives the `task_id`, clears the initial progress stream, and begins querying `GET /api/status/{task_id}` via the Cloudflare Worker Gateway every 5 seconds.
-6. **Task Status Mapping** → The Gateway proxies GET requests to the Python engine's `/api/v1/task_status/{task_id}` endpoint.
+2. **Task Creation (POST)** → The frontend fires a `<kbd>POST /api/scan</kbd>` to the Cloudflare Worker API Gateway.
+3. **Gateway Forwarding** → The Cloudflare Worker injects the `<kbd>HF_TOKEN</kbd>` authorization header and forwards the request to the Python engine's `<kbd>/api/v1/analyze_flood</kbd>` endpoint.
+4. **Immediate Scheduling** → The Python engine generates a unique `<kbd>task_id</kbd>` (UUID), stores a status of `"processing"` in-memory, schedules the execution to run on FastAPI's `<kbd>BackgroundTasks</kbd>`, and returns `{"task_id": "uuid"}` back through the Gateway to the client in under 500ms.
+5. **Asynchronous Polling Loop (GET)** → The frontend receives the `<kbd>task_id</kbd>`, clears the initial progress stream, and begins querying `<kbd>GET /api/status/{task_id}</kbd>` via the Cloudflare Worker Gateway every 5 seconds.
+6. **Task Status Mapping** → The Gateway proxies GET requests to the Python engine's `<kbd>/api/v1/task_status/{task_id}</kbd>` endpoint.
 7. **Task Execution & Resolution**:
    - The Python engine processes the task in the background. It tiles the area, runs U-Net AI predictions, performs GIS post-processing, and calculates OSM damage metrics.
    - Upon completion, the task state is updated to `"completed"` with the resulting data payload. If it fails, status becomes `"failed"` with the error.
@@ -188,7 +188,28 @@ For scans with `radius_km > 0`:
 
 ---
 
+## System Constraints & Sensor Limitations
+
+Disaster mapping platforms operating at the edge must account for the physical constraints of satellite remote sensing. This platform addresses and operates within the following operational envelopes:
+
+### 📡 1. Optical Cloud Obscuration
+* **Constraint:** Heavy precipitation and thick storm clouds completely block Sentinel-2 MSI multispectral optical sensors, zeroing out 6 of the 8 model input bands.
+* **Mitigation:** The **Smart SAR Fallback** architecture automatically detects blank optical bands at runtime. It shifts inference logic to rely exclusively on the **Sentinel-1 C-band Synthetic Aperture Radar (SAR)** polarization bands (VV/VH), which penetrate cloud cover and operate independently of solar illumination.
+
+### 🏙️ 2. SAR Speckle Noise & Urban Layover
+* **Constraint:** Synthetic Aperture Radar is highly sensitive to surface geometry. In dense metropolitan zones, high-rise building walls produce strong radar echoes (the **double-bounce** effect). In addition, radar backscatter displays inherent granular noise ("speckle").
+* **Mitigation:** The post-processing pipeline mitigates this by running aggressive morphological filtering (opening and closing kernels) combined with OpenStreetMap geometry masks to filter false positives and double-bounce outliers in built-up urban grids.
+
+### 🕒 3. Temporal Resolution (Constellation Revisit Time)
+* **Constraint:** Satellite scans do not represent real-time continuous video feeds. Sentinel satellite constellation revisits over any single coordinate occur every **3 to 12 days** depending on the latitude and orbital pass.
+* **Mitigation:** The platform acts as a *near-real-time (NRT)* tactical assessment portal. The UI explicitly logs the satellite observation timestamp to warn operators of the exact latency between the satellite capture time and the disaster timeline.
+
+---
+
 ## Directory Structure & File Roles
+
+<details>
+<summary>📂 View Repository Tree & Component Mapping</summary>
 
 ```
 Flood_SaaS_Project/
@@ -236,6 +257,8 @@ Flood_SaaS_Project/
 └── requirements.txt                 # Python dependency manifest
 ```
 
+</details>
+
 ---
 
 ## Setup & Execution
@@ -259,12 +282,12 @@ cd Flood_SaaS_Project
 ### 2. Configure Google Earth Engine
 
 Place your GEE service account credentials at:
+`<kbd>ai-engine-python/auth/gee_service_account.json</kbd>`
 
-```
-ai-engine-python/auth/gee_service_account.json
-```
+> [!WARNING]
+> Ensure the service account has active Google Earth Engine API access enabled in your Google Cloud Console.
 
-Update the project ID in `core/gee_fetcher.py`:
+Update the project ID in `<kbd>core/gee_fetcher.py</kbd>`:
 
 ```python
 ee.Initialize(project='YOUR_GEE_PROJECT_ID')
@@ -272,16 +295,14 @@ ee.Initialize(project='YOUR_GEE_PROJECT_ID')
 
 ### 3. Install & Start the Python AI Engine
 
+To install dependencies and boot the FastAPI backend:
 ```bash
 cd ai-engine-python
 pip install -r ../requirements.txt
 python main.py
 ```
 
-The engine will:
-- Load the U-Net model into memory
-- Start the FastAPI server on `http://localhost:8000`
-- Display `[API] Model loaded successfully. Server is READY.`
+The engine will load the U-Net model weights into memory and start the server at `<kbd>http://localhost:8000</kbd>`.
 
 ### 4. Deploy the Cloudflare Worker API Gateway
 
@@ -294,13 +315,14 @@ npx wrangler secret put HF_TOKEN
 # Enter your Hugging Face Space Authorization Token when prompted
 ```
 
-Deploy the worker globally using wrangler:
+Deploy the worker globally to the Cloudflare Edge network:
 
 ```bash
 npx wrangler deploy
 ```
 
-The gateway worker will deploy to a subdomain under `*.workers.dev` (e.g., `https://flood-api-gateway.your-subdomain.workers.dev`). It will handle routing for the `/api/scan` and `/api/status/*` endpoints.
+> [!NOTE]
+> The gateway worker will deploy to a subdomain under `*.workers.dev` (e.g., `https://flood-api-gateway.your-subdomain.workers.dev`) and automatically handle routing and CORS preflights.
 
 ### 5. Deploy the Frontend on Cloudflare Pages
 
@@ -312,7 +334,7 @@ The frontend operates as a static site and is hosted globally via Cloudflare Pag
 4. Set the **Build settings**:
    - **Framework preset**: `None` (Static HTML/JS)
    - **Build command**: Leave blank
-   - **Build output directory**: `frontend/src`
+   - **Build output directory**: `<kbd>frontend/src</kbd>`
 5. Click **Save and Deploy**.
 
 Cloudflare Pages will build the frontend and serve it at a public `https://*.pages.dev` URL.
