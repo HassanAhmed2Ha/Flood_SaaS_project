@@ -1,0 +1,35 @@
+# Virtual Environment
+.Flood_SaaS_Project/
+
+# Agents
+.agents/
+
+# Python
+__pycache__/
+*.pyc
+
+# Models
+*.keras
+*.h5
+
+# Generated Data
+ai-engine-python/live_data/
+ai-engine-python/cache/
+ai-engine-python/flood_outputs/
+
+# Credentials
+ai-engine-python/auth/gee_service_account.json
+*.pem
+*.key
+
+# Node
+backend-node/node_modules/
+backend-node/.env
+
+# Remote Sensing Data
+*.tif
+*.tiff
+
+# OS
+.DS_Store
+Thumbs.db

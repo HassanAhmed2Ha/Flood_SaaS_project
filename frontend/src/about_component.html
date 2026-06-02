@@ -1,0 +1,124 @@
+<!-- ═══════════════════════════════════════════════
+     CLASSIFIED INTEL DOSSIER — Dynamic Component
+     Loaded via fetch() and injected into DOM at runtime
+     ═══════════════════════════════════════════════ -->
+
+<div id="about-overlay" class="dossier-overlay">
+    <div class="dossier-panel">
+
+        <!-- Scan line CRT effect -->
+        <div class="dossier-scanline"></div>
+
+        <!-- Header -->
+        <div class="dossier-header">
+            <div class="dossier-classification">
+                <span class="dossier-badge">CLASSIFIED</span>
+                <span class="dossier-id">DOSSIER // FLD-INT-2026</span>
+            </div>
+            <button id="about-close" class="dossier-close" aria-label="Close">×</button>
+        </div>
+
+        <div class="dossier-title-bar">
+            <span class="dossier-bracket">[</span>
+            <span class="dossier-title">SYSTEM INTEL DOSSIER</span>
+            <span class="dossier-bracket">]</span>
+        </div>
+
+        <!-- ── SECTION 1: Methodology ── -->
+        <div class="dossier-section">
+            <div class="dossier-section-tag">
+                <span class="tag-dot"></span>
+                Acquisition &amp; Inference Pipeline
+            </div>
+            <div class="dossier-grid">
+                <div class="dossier-field">
+                    <span class="field-key">SAR_SOURCE</span>
+                    <span class="field-val">Sentinel-1 GRD (C-Band, VV/VH Dual-Pol)</span>
+                </div>
+                <div class="dossier-field">
+                    <span class="field-key">OPTICAL_SOURCE</span>
+                    <span class="field-val">Sentinel-2 MSI (B2/B3/B4/B8/B11/B12)</span>
+                </div>
+                <div class="dossier-field">
+                    <span class="field-key">DATA_BROKER</span>
+                    <span class="field-val">Google Earth Engine API v0.1.415</span>
+                </div>
+                <div class="dossier-field">
+                    <span class="field-key">AI_ARCHITECTURE</span>
+                    <span class="field-val">U-Net (256×256 patch, 8-channel composite)</span>
+                </div>
+                <div class="dossier-field">
+                    <span class="field-key">POST_PROCESS</span>
+                    <span class="field-val">Morphological Filtering → Polygon Extraction → OSM Overlay</span>
+                </div>
+                <div class="dossier-field">
+                    <span class="field-key">GRID_ENGINE</span>
+                    <span class="field-val">Concurrent Tile Mosaicking (5×5 km, ThreadPool)</span>
+                </div>
+                <div class="dossier-field">
+                    <span class="field-key">MAX_COVERAGE</span>
+                    <span class="field-val">~400 km² per scan (20km radius)</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="dossier-divider"></div>
+
+        <!-- ── SECTION 2: Operative Profile ── -->
+        <div class="dossier-section">
+            <div class="dossier-section-tag">
+                <span class="tag-dot"></span>
+                Operative Profile
+            </div>
+            <div class="dossier-grid">
+                <div class="dossier-field">
+                    <span class="field-key">CALLSIGN</span>
+                    <span class="field-val field-highlight">HASSAN</span>
+                </div>
+                <div class="dossier-field">
+                    <span class="field-key">DESIGNATION</span>
+                    <span class="field-val">AI &amp; Remote Sensing Engineer</span>
+                </div>
+                <div class="dossier-field">
+                    <span class="field-key">MISSION</span>
+                    <span class="field-val">End-to-end flood intelligence — satellite acquisition → AI inference → tactical damage visualization</span>
+                </div>
+                <div class="dossier-field">
+                    <span class="field-key">STATUS</span>
+                    <span class="field-val"><span class="status-active"></span> ACTIVE — MVP OPERATIONAL</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="dossier-divider"></div>
+
+        <!-- ── SECTION 3: Communications ── -->
+        <div class="dossier-section">
+            <div class="dossier-section-tag">
+                <span class="tag-dot"></span>
+                Secure Channels
+            </div>
+            <div class="dossier-commands">
+                <a href="https://github.com/" target="_blank" rel="noopener" class="dossier-cmd">
+                    <span class="cmd-prompt">&gt;</span>
+                    <span class="cmd-label">EXECUTE:</span>
+                    <span class="cmd-target">GITHUB_REPO</span>
+                    <span class="cmd-arrow">→</span>
+                </a>
+                <a href="mailto:contact@floodintel.ai" class="dossier-cmd">
+                    <span class="cmd-prompt">&gt;</span>
+                    <span class="cmd-label">EXECUTE:</span>
+                    <span class="cmd-target">SECURE_COMM</span>
+                    <span class="cmd-arrow">→</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="dossier-footer">
+            <span>FLOOD INTELLIGENCE AI — v2.0</span>
+            <span class="dossier-footer-dot">◆</span>
+            <span>TACTICAL COMMAND SYSTEM</span>
+        </div>
+    </div>
+</div>

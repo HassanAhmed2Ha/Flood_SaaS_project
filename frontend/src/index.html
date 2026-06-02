@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Flood Intelligence AI — Tactical Command</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <link rel="stylesheet" href="tactical.css" />
+    <script type="importmap">
+      { "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.161/build/three.module.js",
+          "jsm/": "https://cdn.jsdelivr.net/npm/three@0.161/examples/jsm/"
+      }}
+    </script>
+</head>
+<body>
+
+    <!-- ========== GRID SHELL (layout container) ========== -->
+    <div id="grid-shell">
+
+    <!-- ========== LEFT PANEL: Mission Parameters ========== -->
+    <div id="ui-panel" class="ghost-panel panel-left">
+        <div class="bracket-frame">
+            <span class="corner tl"></span><span class="corner tr"></span>
+            <span class="corner bl"></span><span class="corner br"></span>
+        </div>
+
+        <div class="panel-tag">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#00aaff" stroke-width="2.5"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5"/></svg>
+            Mission Control
+        </div>
+
+        <div class="input-cluster">
+            <label for="lat">Latitude</label>
+            <input type="number" id="lat" value="49.07" step="0.01" />
+            <label for="lon">Longitude</label>
+            <input type="number" id="lon" value="-122.15" step="0.01" />
+            <label for="start_date">Start Date</label>
+            <input type="date" id="start_date" value="2021-11-16" />
+            <label for="end_date">End Date</label>
+            <input type="date" id="end_date" value="2021-11-26" />
+            <label for="scan_radius">Scan Radius</label>
+            <select id="scan_radius">
+                <option value="0">Standard (Point)</option>
+                <option value="10">City Scale (10 km)</option>
+                <option value="20" selected>Regional (20 km)</option>
+            </select>
+        </div>
+
+        <button id="scan-btn">Initiate Scan</button>
+
+        <div id="uplink-status">
+            <span class="uplink-dot"></span>
+            <span>Uplink Active</span>
+            <span class="uplink-ping">24ms</span>
+        </div>
+    </div>
+
+    <!-- ========== RIGHT PANEL: Tactical Intelligence ========== -->
+    <div id="map-hud" class="ghost-panel panel-right">
+        <div class="bracket-frame">
+            <span class="corner tl"></span><span class="corner tr"></span>
+            <span class="corner bl"></span><span class="corner br"></span>
+        </div>
+
+        <div class="panel-tag">Tactical Intel</div>
+
+        <!-- Neon Confidence Gauge -->
+        <div class="gauge-wrap">
+            <svg class="gauge-ring" viewBox="0 0 100 100">
+                <defs>
+                    <linearGradient id="gGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stop-color="#00aaff"/>
+                        <stop offset="100%" stop-color="#00ffcc"/>
+                    </linearGradient>
+                    <filter id="gGlow">
+                        <feGaussianBlur stdDeviation="2.5" result="blur"/>
+                        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                    </filter>
+                </defs>
+                <circle class="g-track" cx="50" cy="50" r="42"/>
+                <circle class="g-fill" id="gauge-arc" cx="50" cy="50" r="42" filter="url(#gGlow)"/>
+            </svg>
+            <div class="gauge-text">
+                <span class="gauge-num" id="hud-confidence">—</span>
+                <span class="gauge-sub">Confidence</span>
+            </div>
+        </div>
+
+        <!-- Icon-based Metrics -->
+        <div class="metric-row">
+            <svg class="m-icon" viewBox="0 0 24 24" fill="none" stroke="#ff4466" stroke-width="1.5"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            <div class="m-data">
+                <span class="m-label">Flood Area</span>
+                <span class="m-value" id="hud-area">—</span>
+            </div>
+        </div>
+        <div class="metric-row">
+            <svg class="m-icon" viewBox="0 0 24 24" fill="none" stroke="#ff8844" stroke-width="1.5"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/></svg>
+            <div class="m-data">
+                <span class="m-label">Buildings</span>
+                <span class="m-value" id="hud-buildings">—</span>
+            </div>
+        </div>
+        <div class="metric-row">
+            <svg class="m-icon" viewBox="0 0 24 24" fill="none" stroke="#ffcc00" stroke-width="1.5"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+            <div class="m-data">
+                <span class="m-label">Roads (km)</span>
+                <span class="m-value" id="hud-roads">—</span>
+            </div>
+        </div>
+        <div class="metric-row">
+            <svg class="m-icon" viewBox="0 0 24 24" fill="none" stroke="#00aaff" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            <div class="m-data">
+                <span class="m-label">Farmland</span>
+                <span class="m-value" id="hud-farmland">—</span>
+            </div>
+        </div>
+
+        <!-- Gradient Pulse Risk Bar -->
+        <div class="risk-block">
+            <span class="risk-label">Risk Level</span>
+            <div class="risk-track"><div class="risk-fill"></div></div>
+            <span class="risk-tag">HIGH</span>
+        </div>
+    </div>
+
+    <!-- ========== BOTTOM PANEL: Telemetry ========== -->
+    <div id="telemetry-panel" class="ghost-panel panel-bottom">
+        <div class="bracket-frame">
+            <span class="corner tl"></span><span class="corner tr"></span>
+            <span class="corner bl"></span><span class="corner br"></span>
+        </div>
+        <div class="tele-head">
+            <span class="tele-dot"></span>
+            <span class="tele-title">System Log</span>
+            <span class="tele-clock" id="sys-clock"></span>
+        </div>
+        <div class="tele-body">
+            <div class="log-default">[SYS] Flood Intelligence Engine v1.0 — All Systems Nominal</div>
+            <div id="status-box"></div>
+        </div>
+    </div>
+
+    </div><!-- /grid-shell -->
+
+    <!-- ========== OVERLAYS (outside grid) ========== -->
+    <div id="zoom-vignette"></div>
+    <div id="map2d"></div>
+
+    <!-- ========== RETURN BUTTON ========== -->
+    <button id="return-globe-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+        </svg>
+        Return to Globe
+    </button>
+
+    <!-- ========== INTEL DOSSIER TRIGGER (top-right HUD) ========== -->
+    <button id="about-btn" aria-label="Intel Dossier">
+        <span class="intel-dot"></span>
+        <span>INTEL DOSSIER</span>
+    </button>
+
+    <!-- About modal injected dynamically by JS from about_component.html -->
+
+    <script>
+        setInterval(() => {
+            const el = document.getElementById('sys-clock');
+            if (el) el.textContent = new Date().toLocaleTimeString('en-GB');
+        }, 1000);
+    </script>
+    <script type="module" src="index.js"></script>
+</body>
+</html>

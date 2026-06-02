@@ -1,0 +1,31 @@
+Flood_SaaS_Project/
+│
+├── frontend/                   # (أكواد الـ 3D التي رفعتها + واجهة التحكم)
+│   ├── index.html              # يدمج الـ Canvas مع الـ UI Forms
+│   ├── style.css               # تصميم لوحة التحكم الشفافة
+│   ├── src/                    # أكواد Three.js الخاصة بك
+│   │   ├── index.js            # المحرك الرئيسي لـ 3D
+│   │   ├── getEarthMat.js      
+│   │   ├── getFresnelMat.js    
+│   │   ├── getLayer.js         
+│   │   └── getStarfield.js     
+│   └── textures/               # صور الخرائط والنجوم للكوكب
+│
+├── backend-node/               # (خادم الإدارة والتوجيه)
+│   ├── package.json
+│   ├── server.js               # Express & Socket.io server
+│   └── routes/
+│       └── scan.js             # يستقبل الطلب ويرسله لبايثون
+│
+└── ai-engine-python/           # (محركك القوي - أكواد الـ Notebook)
+    ├── requirements.txt
+    ├── main.py                 # (FastAPI) يفتح الـ Endpoints
+    ├── models/
+    │   └── unet_flood_model.keras
+    ├── auth/
+    │   └── gee_service_account.json
+     dockerfile
+    └── core/                   # دوال بايثون التي برمجناها معاً
+        ├── gee_fetcher.py      # fetch_8_channel_image()
+        ├── ai_segmentation.py  # predict_flood() + Physics filters
+        └── gis_metrics.py      # calculate_metrics_and_export()
