@@ -66,51 +66,30 @@ Wide-area disaster scanning (up to **400 km²** per request) is achieved through
 
 ```text
 ┌────────────────────────────────────────────────────────────────┐
-│                           CLIENT HUD                           │
-│                       (Cloudflare Pages)                       │
+│                           FRONTEND                             │
+│                      (Cloudflare Pages)                        │
 └──────────────┬──────────────────────────────────▲──────────────┘
                │                                  │
                │ 1. POST /api/scan                │ 5. GET /api/status/{task_id}
-               │    (Submit Request)              │    (Poll Status Return)
+               │    (Trigger Job)                 │    (Polling Loop Return)
                ▼                                  │
 ┌─────────────────────────────────────────────────┴──────────────┐
-│                   EDGE API GATEWAY (Worker)                    │
+│                    API GATEWAY (Worker)                        │
 └──────────────┬──────────────────────────────────▲──────────────┘
                │                                  │
-               │ 2. Proxy POST /api/v1/...        │ 4. Proxy GET /api/v1/...
+               │ 2. Forward Proxy POST            │ 4. Forward Proxy GET
                ▼                                  │
 ┌─────────────────────────────────────────────────┴──────────────┐
-│                    AI ENGINE (FastAPI Host)                    │
-│      [BackgroundTasks] ───┐            [In-Memory Task Store]  │
-└───────────────────────────│────────────────────────────────────┘
-                            │
-                            │ 3. Dispatches Task
-                            ▼
+│                     AI ENGINE (FastAPI)                        │
+│       [Background Process]                       [Task Store]  │
+└──────────────┬─────────────────────────────────────────────────┘
+               │
+               │ 3. Query Satellite Data
+               ▼
 ┌────────────────────────────────────────────────────────────────┐
-│                    GRID-TILING ORCHESTRATOR                    │
-│            (U-Net Segmenter & GIS Post-Processor)              │
-└──────────────────────────────┬─────────────────────────────────┘
-                               │
-                               │ 3a. Geospatial API Queries
-                               ▼
-┌────────────────────────────────────────────────────────────────┐
-│             GOOGLE EARTH ENGINE SATELLITE DATA                 │
-│             (Sentinel-1 & Sentinel-2 Archives)                 │
+│                 GOOGLE EARTH ENGINE (GEE)                      │
 └────────────────────────────────────────────────────────────────┘
 ```
-
-### Request Lifecycle
-
-1. **User Input** — The operator enters target coordinates, date range, and scan radius on the Left Panel.
-2. **Task Creation** — The frontend fires a `POST /api/scan` request to the Cloudflare Worker API Gateway.
-3. **Gateway Forwarding** — The Cloudflare Worker injects the `HF_TOKEN` authorization header and forwards the request to the Python engine's `/api/v1/analyze_flood` endpoint.
-4. **Immediate Scheduling** — The Python engine generates a unique `task_id` (UUID), stores a status of `"processing"` in-memory, schedules the execution to run on FastAPI's `BackgroundTasks`, and returns `{"task_id": "uuid"}` back through the Gateway to the client in under 500ms.
-5. **Asynchronous Polling Loop** — The frontend receives the `task_id`, clears the initial progress stream, and begins querying `GET /api/status/{task_id}` via the Cloudflare Worker Gateway every 5 seconds.
-6. **Task Status Mapping** — The Gateway proxies `GET` requests to the Python engine's `/api/v1/task_status/{task_id}` endpoint.
-7. **Task Execution & Resolution** — The Python engine processes the task in the background:
-   - It tiles the area, runs U-Net AI predictions, performs GIS post-processing, and calculates OSM damage metrics.
-   - Upon completion, the task state is updated to `"completed"` with the resulting data payload. If it fails, the status becomes `"failed"` with the error.
-8. **Cinematic Render** — On a `"completed"` response, the frontend cancels the polling loop, maps the vector flood overlays, displays the metrics in the Right Panel, and triggers the 3D-to-2D tactical zoom transition.
 
 ---
 
