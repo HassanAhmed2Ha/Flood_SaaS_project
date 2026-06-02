@@ -95,9 +95,9 @@ Wide-area disaster scanning (up to **400 km²** per request) is achieved through
                       │                                                  │
                       │ 2. Proxy Forward POST                            │ 4. Return Status Data
                       ▼                                                  │ (completed/failed)
-╔════════════════════════════════════════════════════════════════════════│══════╗
-║             [ DETACHED ASYNCHRONOUS AI INFERENCE ENGINE ] (FastAPI)    │      ║
-║                                                                        │      ║
+╔════════════════════════════════════════════════════════════════════════│═════ ══ ═╗
+║             [ DETACHED ASYNCHRONOUS AI INFERENCE ENGINE ] (FastAPI)    │          ║
+║                                                                        │          ║
 ║   ┌──────────────────────────────────┐                           ┌─────┴──────┐   ║
 ║   │ FastAPI API Router:              │                           │ In-Memory  │   ║
 ║   │ Enqueues BackgroundTasks         │──────────────────────────▶│ Tasks State│   ║
@@ -107,8 +107,8 @@ Wide-area disaster scanning (up to **400 km²** per request) is achieved through
 ║                     │ 3. Dispatches Asynchronous Process               │ Updates  ║
 ║                     ▼                                                  │ State    ║
 ║   ┌────────────────────────────────────────────────────────────────────│──────┐   ║
-║   │                   [ GRID-TILING ORCHESTRATOR ]                     │      ║
-║   │                                                                    │      ║
+║   │                   [ GRID-TILING ORCHESTRATOR ]                     │      │   ║
+║   │                                                                    │      │   ║
 ║   │   ┌───────────────────┐     ┌───────────────────┐     ┌────────────┴──┐   │   ║
 ║   │   │  1. GEE Fetcher   │───▶ │   2. Segmenter    │───▶ │ 3. GIS/OSM    │   │   ║
 ║   │   │  8-Channel Bands  │     │   (U-Net Engine)  │     │ Post-Process  │   │   ║
@@ -120,7 +120,7 @@ Wide-area disaster scanning (up to **400 km²** per request) is achieved through
 ╔═══════════════════════════════════════════════════════════════════════════════════╗
 ║                      [ EARTH ENGINE API DATALAKE ]                                ║
 ║                                                                                   ║
-║            🛰️  Sentinel-1 Radar (GRD)   |   🛰️  Sentinel-2 Optical (MSI)         ║
+║            🛰️  Sentinel-1 Radar (GRD)   |   🛰️  Sentinel-2 Optical (MSI)          ║
 ╚═══════════════════════════════════════════════════════════════════════════════════╝
 ```
 
