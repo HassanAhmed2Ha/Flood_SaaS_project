@@ -13,6 +13,11 @@
 [![Three.js](https://img.shields.io/badge/Three.js-r161-000?logo=three.js)](https://threejs.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
+<br>
+
+[![Live Demo](https://img.shields.io/badge/Live_Demo-Online-success?style=for-the-badge)](https://flood-saas-project.pages.dev)
+[![AI Engine](https://img.shields.io/badge/AI_Engine-Running-blue?style=for-the-badge)](https://hassan2007-flood-intelligence-engine.hf.space/docs)
+
 </div>
 
 ---
@@ -25,6 +30,7 @@
 - [Directory Structure & File Roles](#directory-structure--file-roles)
 - [Setup & Execution](#setup--execution)
 - [API Reference](#api-reference)
+- [Future Roadmap](#future-roadmap)
 - [License](#license)
 
 ---
@@ -38,6 +44,13 @@
 The frontend rejects conventional dashboard design in favor of a **Cyberpunk / Ghost-in-the-Shell** tactical HUD — a cardless, data-layer architecture where information floats over a 3D Earth globe rendered with Three.js. Corner brackets replace card borders. Monospaced typography (`JetBrains Mono`, `Space Mono`) replaces sans-serif defaults. Cyan neon-glow accents and glassmorphism panels replace flat Material boxes.
 
 When a scan completes, a choreographed camera interpolation zooms the globe into the target coordinates, cross-fading into a 2D Leaflet tactical map where georeferenced flood polygons are overlaid in real time.
+
+<div align="center">
+  <img src="3D_MAP.png" width="48%" alt="3D Tactical Mission Globe View" />
+  <img src="2D_MAP.png" width="48%" alt="2D Tactical Flood Extent View" />
+  <br>
+  <sub><strong>Figure:</strong> Tactical Mission Control HUD — 3D Global Overview and 2D Localized Flood Extent Analysis</sub>
+</div>
 
 ### AI Philosophy
 
@@ -239,7 +252,7 @@ Flood_SaaS_Project/
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/Flood_SaaS_Project.git
+git clone https://github.com/HassanAhmed2Hassan/Flood_SaaS_Project.git
 cd Flood_SaaS_Project
 ```
 
@@ -254,7 +267,7 @@ ai-engine-python/auth/gee_service_account.json
 Update the project ID in `core/gee_fetcher.py`:
 
 ```python
-ee.Initialize(project='your-gee-project-id')
+ee.Initialize(project='YOUR_GEE_PROJECT_ID')
 ```
 
 ### 3. Install & Start the Python AI Engine
@@ -299,7 +312,7 @@ The frontend operates as a static site and is hosted globally via Cloudflare Pag
 4. Set the **Build settings**:
    - **Framework preset**: `None` (Static HTML/JS)
    - **Build command**: Leave blank
-   - **Build output directory**: `frontend`
+   - **Build output directory**: `frontend/src`
 5. Click **Save and Deploy**.
 
 Cloudflare Pages will build the frontend and serve it at a public `https://*.pages.dev` URL.
@@ -408,6 +421,24 @@ If an error occurs during satellite ingestion or inference processing.
   "error": "Failed to fetch satellite data. Clouds too dense or wrong dates."
 }
 ```
+
+---
+
+## Future Roadmap
+
+To transition this tactical operations system into an active autonomous coordinator, we are planning the integration of the following next-generation telemetry and analysis systems:
+
+1. **Predictive LLM-based Casualty & Displacement Estimation**
+   - Leverage fine-tuned Large Language Models (LLMs) to cross-reference real-time flood polygons and structural damage metrics with high-resolution demographic datasets (e.g., LandScan).
+   - Generate automated emergency reports, projecting critical rescue zones, estimated displacement counts, and resource shortages within the first 15 minutes of satellite ingestion.
+
+2. **Autonomous Drone Swarm Telemetry Ingestion**
+   - Implement real-time WebRTC or RTMP video/data feeds from tactical drone swarms.
+   - Run sub-decimeter edge-AI object detection on incoming feeds to locate stranded individuals, identify floating hazards, and dynamically map escape routes under tree cover where satellites cannot see.
+
+3. **Automated Warning Dispatch & Ground Responder Routing**
+   - Integrate with Twilio, WhatsApp, and CAP (Common Alerting Protocol) gateways to automatically broadcast localized emergency alerts to residents inside the predicted flood path.
+   - Generate optimal multi-agent routing profiles (using pgRouting or OSRM) for search-and-rescue teams, routing around flooded roads and structurally compromised bridges.
 
 ---
 
