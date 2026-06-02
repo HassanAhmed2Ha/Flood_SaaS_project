@@ -463,6 +463,16 @@ To transition this tactical operations system into an active autonomous coordina
    - Generate optimal multi-agent routing profiles (using pgRouting or OSRM) for search-and-rescue teams, routing around flooded roads and structurally compromised bridges.
 
 ---
+---
+
+## 👨‍💻 About the Developer
+
+**Hassan Ahmed** — Bioinformatics student and data scientist at Alexandria University, specializing in AI-driven remote sensing and geospatial intelligence. 
+
+I am passionate about building solutions that bridge the gap between complex satellite telemetry and actionable disaster-response intelligence. You can follow my work or get in touch through the links below:
+
+* **[LinkedIn: Hassan Ahmed](https://www.linkedin.com/in/hassan-ahmed2007/)**
+* **[Portfolio: Hassan Ahmed](https://hassan-ahmed-portfolio.vercel.app/)**
 
 ## License
 
