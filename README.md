@@ -60,35 +60,55 @@ A **Smart Cloud Fallback** safety net prevents model hallucination when dense cl
 
 ### Architecture Philosophy
 
-Wide-area disaster scanning (up to **400 km²** per request) is achieved through a **CPU-optimized Grid-Tiling Engine** that subdivides the area of interest into 5×5 km tiles, fetches satellite data concurrently via `ThreadPoolExecutor`, runs per-tile AI inference, and mosaics the results into a seamless output raster. This design eliminates Earth Engine timeout failures and operates without GPU dependencies — suitable for serverless or containerized environments.
+Wide-area disaster scanning (up to **400 km²** per request) is achieved through a **CPU-optimized Grid-Tiling Engine** that subdivides the area of interest into 5×5 km tiles, fetches satellite data concurrently via `ThreadPoolExecutor`, runs per-tile AI inference, and mosaics the results into a seamless output raster. This design eliminates Earth Engine timeout failures and operates without GPU dependencies — suitable for serverless or containerized deployment.
+
+---
 
 ## System Architecture
 
 ```text
-┌────────────────────────────────────────────────────────────────┐
-│                           FRONTEND                             │
-│                      (Cloudflare Pages)                        │
-└──────────────┬──────────────────────────────────▲──────────────┘
-               │                                  │
-               │ 1. POST /api/scan                │ 5. GET /api/status/{task_id}
-               │    (Trigger Job)                 │    (Polling Loop Return)
-               ▼                                  │
-┌─────────────────────────────────────────────────┴──────────────┐
-│                    API GATEWAY (Worker)                        │
-└──────────────┬──────────────────────────────────▲──────────────┘
-               │                                  │
-               │ 2. Forward Proxy POST            │ 4. Forward Proxy GET
-               ▼                                  │
-┌─────────────────────────────────────────────────┴──────────────┐
-│                     AI ENGINE (FastAPI)                        │
-│       [Background Process]                       [Task Store]  │
-└──────────────┬─────────────────────────────────────────────────┘
-               │
-               │ 3. Query Satellite Data
-               ▼
-┌────────────────────────────────────────────────────────────────┐
-│                 GOOGLE EARTH ENGINE (GEE)                      │
-└────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────┐
+│               FRONTEND (Hosted on Cloudflare Pages)               │
+│   Vanilla JS · Three.js Globe · Leaflet Map · Tactical HUD        │
+│   ┌─────────────┐ ┌──────────────┐ ┌──────────────────────────┐   │
+│   │ Left Panel  │ │ 3D Globe /   │ │ Right Panel              │   │
+│   │ Mission     │ │ 2D Tactical  │ │ AI Confidence Gauge      │   │
+│   │ Parameters  │ │ Map View     │ │ Damage Metrics           │   │
+│   └─────────────┘ └──────────────┘ └──────────────────────────┘   │
+│   ┌──────────────────────────────────────────────────────────┐    │
+│   │ Bottom Panel — System Log (dynamic asynchronous polling) │    │
+│   └──────────────────────────────────────────────────────────┘    │
+└──────────────┬────────────────────────▲───────────────────────────┘
+               │ 1. POST /api/scan      │ 3. GET /api/status/{task_id} (every 5s)
+               ▼                        │    (Polling Loop)
+┌───────────────────────────────────────┴──────────────────────────┐
+│                      API GATEWAY (Worker)                        │
+│   Intercepts requests, handles CORS preflights, injects auth.    │
+└──────────────┬────────────────────────▲──────────────────────────┘
+               │ 2. Forward POST        │ 4. Forward GET status
+               ▼                        │
+┌───────────────────────────────────────┴──────────────────────────┐
+│                      AI ENGINE (FastAPI)                         │
+│   Uses BackgroundTasks to process grid analysis asynchronously.   │
+│   Tracks status in-memory via uuid task ID keys.                  │
+│                                                                   │
+│   ┌──────────┐   ┌──────────────┐   ┌──────────────────────────┐  │
+│   │ GEE      │──▶│ AI           │──▶│ GIS Post-Processing      │  │
+│   │ Fetcher  │   │ Segmentation │   │ Morphological Filtering  │  │
+│   │          │   │ (U-Net)      │   │ Polygon Extraction       │  │
+│   └──────────┘   └──────────────┘   │ OSM Damage Assessment    │  │
+│                                     └──────────────────────────┘  │
+│   ┌──────────────────────────────────────────────────────────┐    │
+│   │         Grid Orchestrator (Wide-Area Tiling Mode)        │    │
+│   │  generate_grid → ThreadPoolExecutor → rasterio.merge     │    │
+│   └──────────────────────────────────────────────────────────┘    │
+└───────────────────────────────────────┬──────────────────────────┘
+                                        │
+                                        ▼
+                           ┌─────────────────────────┐
+                           │   Google Earth Engine   │
+                           │          (GEE)          │
+                           └─────────────────────────┘
 ```
 
 ---
@@ -448,3 +468,5 @@ This project is released under the **MIT License**.
 <div align="center">
   <sub>Built by <strong>Hassan</strong> — AI & Remote Sensing Engineer</sub>
 </div>
+
+__________________________________
