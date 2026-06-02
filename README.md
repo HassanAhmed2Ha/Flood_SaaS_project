@@ -60,13 +60,9 @@ A **Smart Cloud Fallback** safety net prevents model hallucination when dense cl
 
 ### Architecture Philosophy
 
-Wide-area disaster scanning (up to **400 km²** per request) is achieved through a **CPU-optimized Grid-Tiling Engine** that subdivides the area of interest into 5×5 km tiles, fetches satellite data concurrently via `ThreadPoolExecutor`, runs per-tile AI inference, and mosaics the results into a seamless output raster. This design eliminates Earth Engine timeout failures and operates without GPU dependencies — suitable for serverless or containerized deployment.
+Wide-area disaster scanning (up to **400 km²** per request) is achieved through a **CPU-optimized Grid-Tiling Engine** that subdivides the area of interest into 5×5 km tiles, fetches satellite data concurrently via `ThreadPoolExecutor`, runs per-tile AI inference, and mosaics the results into a seamless output raster. This design eliminates Earth Engine timeout failures and operates without GPU dependencies — suitable for serverless or containerized## System Architecture
 
----
-
-## System Architecture
-
-
+```
 ============================= TACTICAL DATA FLOW SYSTEM =============================
 
 ╔═══════════════════════════════════════════════════════════════════════════════════╗
@@ -124,9 +120,83 @@ Wide-area disaster scanning (up to **400 km²** per request) is achieved through
 ╔═══════════════════════════════════════════════════════════════════════════════════╗
 ║                      [ EARTH ENGINE API DATALAKE ]                                ║
 ║                                                                                   ║
-║            🛰️  Sentinel-1 Radar (GRD)   |   🛰️  Sentinel-2 Optical (MSI)          ║
+║            🛰️  Sentinel-1 Radar (GRD)   |   🛰️  Sentinel-2 Optical (MSI)         ║
 ╚═══════════════════════════════════════════════════════════════════════════════════╝
 ```
+
+<details>
+<summary>🖥️ View Interactive Cyberpunk Flowchart (HTML/CSS)</summary>
+
+<div class="cyber-flowchart" style="background-color: #0a0f1e; color: #00e5ff; font-family: 'JetBrains Mono', 'Space Mono', monospace; padding: 30px; border: 1px solid #00aaff; box-shadow: 0 0 15px rgba(0, 170, 255, 0.2); position: relative; margin: 20px 0; border-radius: 4px;">
+  <!-- Corner Brackets -->
+  <div style="position: absolute; top: 5px; left: 5px; border-top: 2px solid #00aaff; border-left: 2px solid #00aaff; width: 12px; height: 12px;"></div>
+  <div style="position: absolute; top: 5px; right: 5px; border-top: 2px solid #00aaff; border-right: 2px solid #00aaff; width: 12px; height: 12px;"></div>
+  <div style="position: absolute; bottom: 5px; left: 5px; border-bottom: 2px solid #00aaff; border-left: 2px solid #00aaff; width: 12px; height: 12px;"></div>
+  <div style="position: absolute; bottom: 5px; right: 5px; border-bottom: 2px solid #00aaff; border-right: 2px solid #00aaff; width: 12px; height: 12px;"></div>
+
+  <div style="text-align: center; margin-bottom: 25px; border-bottom: 1px dashed rgba(0, 170, 255, 0.4); padding-bottom: 10px;">
+    <span style="font-weight: bold; letter-spacing: 2px; text-transform: uppercase;">Tactical System Architecture</span>
+  </div>
+
+  <div style="display: flex; flex-direction: column; align-items: center; gap: 20px;">
+    
+    <!-- User Input Node -->
+    <div style="background-color: rgba(0, 170, 255, 0.05); border: 1px dashed #00aaff; padding: 15px 25px; border-radius: 2px; text-align: center; width: 280px; box-sizing: border-box;">
+      <div style="font-size: 0.8em; color: #888;">[01] CLIENT TERMINAL</div>
+      <div style="font-weight: bold; margin-top: 5px;">User Input & Parameters</div>
+      <div style="font-size: 0.85em; color: rgba(0, 229, 255, 0.8); margin-top: 5px;">Coordinate, Date, Radius</div>
+    </div>
+
+    <!-- Arrow 1 -->
+    <div style="color: #00aaff; font-weight: bold;">▼ POST /api/scan</div>
+
+    <!-- API Gateway Node -->
+    <div style="background-color: rgba(0, 170, 255, 0.1); border: 1px solid #00aaff; box-shadow: 0 0 10px rgba(0, 170, 255, 0.1); padding: 18px 25px; border-radius: 2px; text-align: center; width: 320px; box-sizing: border-box; position: relative;">
+      <div style="position: absolute; top: -1px; left: 10px; background: #0a0f1e; padding: 0 5px; font-size: 0.7em; color: #00aaff;">EDGE GATEWAY</div>
+      <div style="font-weight: bold; color: #fff;">API Gateway (Cloudflare Worker)</div>
+      <div style="font-size: 0.8em; color: #88aaff; margin-top: 5px;">Auth Injection (HF_TOKEN) & CORS Handlers</div>
+    </div>
+
+    <!-- Double Arrow Flow & Polling Loop -->
+    <div style="display: flex; justify-content: space-between; width: 340px; font-size: 0.8em; padding: 0 10px;">
+      <div style="color: #00aaff;">▼ Proxy POST</div>
+      <div style="color: #ff0055; font-weight: bold;">▲ GET Task Polling (5s)</div>
+    </div>
+
+    <!-- AI Engine Node -->
+    <div style="background-color: rgba(0, 170, 255, 0.1); border: 1px solid #00aaff; box-shadow: 0 0 10px rgba(0, 170, 255, 0.1); padding: 18px 25px; border-radius: 2px; text-align: center; width: 320px; box-sizing: border-box; position: relative;">
+      <div style="position: absolute; top: -1px; left: 10px; background: #0a0f1e; padding: 0 5px; font-size: 0.7em; color: #00aaff;">AI ENGINE</div>
+      <div style="font-weight: bold; color: #fff;">AI Engine (FastAPI)</div>
+      <div style="font-size: 0.8em; color: #88aaff; margin-top: 5px;">BackgroundTasks Orchestration & Tasks State Store</div>
+    </div>
+
+    <!-- Arrow 3 -->
+    <div style="color: #00aaff; font-weight: bold;">▼ Parallel GIS & Satellite Fetch</div>
+
+    <!-- Google Earth Engine Node -->
+    <div style="background-color: rgba(0, 229, 255, 0.03); border: 1px dashed rgba(0, 170, 255, 0.5); padding: 15px 25px; border-radius: 2px; text-align: center; width: 280px; box-sizing: border-box;">
+      <div style="font-size: 0.8em; color: #888;">[04] TELESPECTRAL DATA</div>
+      <div style="font-weight: bold; color: #fff;">Google Earth Engine</div>
+      <div style="font-size: 0.8em; color: #88aaff; margin-top: 5px;">Sentinel-1 (SAR) & Sentinel-2 (MSI)</div>
+    </div>
+
+  </div>
+</div>
+
+</details>
+
+### Request Lifecycle
+
+1. **User Input** → The operator enters target coordinates, date range, and scan radius on the Left Panel.
+2. **Task Creation (POST)** → The frontend fires a `<kbd>POST /api/scan</kbd>` to the Cloudflare Worker API Gateway.
+3. **Gateway Forwarding** → The Cloudflare Worker injects the `<kbd>HF_TOKEN</kbd>` authorization header and forwards the request to the Python engine's `<kbd>/api/v1/analyze_flood</kbd>` endpoint.
+4. **Immediate Scheduling** → The Python engine generates a unique `<kbd>task_id</kbd>` (UUID), stores a status of `"processing"` in-memory, schedules the execution to run on FastAPI's `<kbd>BackgroundTasks</kbd>`, and returns `{"task_id": "uuid"}` back through the Gateway to the client in under 500ms.
+5. **Asynchronous Polling Loop (GET)** → The frontend receives the `<kbd>task_id</kbd>`, clears the initial progress stream, and begins querying `<kbd>GET /api/status/{task_id}</kbd>` via the Cloudflare Worker Gateway every 5 seconds.
+6. **Task Status Mapping** → The Gateway proxies GET requests to the Python engine's `<kbd>/api/v1/task_status/{task_id}</kbd>` endpoint.
+7. **Task Execution & Resolution**:
+   - The Python engine processes the task in the background. It tiles the area, runs U-Net AI predictions, performs GIS post-processing, and calculates OSM damage metrics.
+   - Upon completion, the task state is updated to `"completed"` with the resulting data payload. If it fails, status becomes `"failed"` with the error.
+8. **Cinematic Render** → On a `"completed"` response, the frontend cancels the polling loop, maps the vector flood overlays, displays the metrics in the Right Panel, and triggers the 3D-to-2D tactical zoom transition.
 
 ---
 
@@ -285,12 +355,12 @@ cd Flood_SaaS_Project
 ### 2. Configure Google Earth Engine
 
 Place your GEE service account credentials at:
-`ai-engine-python/auth/gee_service_account.json`
+`<kbd>ai-engine-python/auth/gee_service_account.json</kbd>`
 
 > [!WARNING]
 > Ensure the service account has active Google Earth Engine API access enabled in your Google Cloud Console.
 
-Update the project ID in `core/gee_fetcher.py`:
+Update the project ID in `<kbd>core/gee_fetcher.py</kbd>`:
 
 ```python
 ee.Initialize(project='YOUR_GEE_PROJECT_ID')
@@ -305,7 +375,7 @@ pip install -r ../requirements.txt
 python main.py
 ```
 
-The engine will load the U-Net model weights into memory and start the server at `http://localhost:8000`.
+The engine will load the U-Net model weights into memory and start the server at `<kbd>http://localhost:8000</kbd>`.
 
 ### 4. Deploy the Cloudflare Worker API Gateway
 
@@ -337,7 +407,7 @@ The frontend operates as a static site and is hosted globally via Cloudflare Pag
 4. Set the **Build settings**:
    - **Framework preset**: `None` (Static HTML/JS)
    - **Build command**: Leave blank
-   - **Build output directory**: `frontend/src`
+   - **Build output directory**: `<kbd>frontend/src</kbd>`
 5. Click **Save and Deploy**.
 
 Cloudflare Pages will build the frontend and serve it at a public `https://*.pages.dev` URL.
@@ -467,15 +537,6 @@ To transition this tactical operations system into an active autonomous coordina
 
 ---
 
-## About the Developer
-
-Built by Hassan, a Bioinformatics student and AI/Remote Sensing Engineer passionate about geospatial intelligence.
-
-- [LinkedIn: Hassan Ahmed](https://www.linkedin.com/in/hassan-ahmed2007/)
-- [Portfolio: Hassan Ahmed](https://hassan-ahmed-portfolio.vercel.app/)
-
----
-
 ## License
 
 This project is released under the **MIT License**.
@@ -485,5 +546,3 @@ This project is released under the **MIT License**.
 <div align="center">
   <sub>Built by <strong>Hassan</strong> — AI & Remote Sensing Engineer</sub>
 </div>
-
-__________________________________
